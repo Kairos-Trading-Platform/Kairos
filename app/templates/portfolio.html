@@ -34,7 +34,7 @@
     </div>
         
     <form method="POST" action="{{ url_for('portfolio.portfolio_feature') }}">
-        {% for asset_type in ['stocks', 'crypto'] %}
+        {% for asset_type in ['stocks','crypto','interest'] %}
             {% set port = portfolio[asset_type] %}
             {% if port.assets|length > 0 %}
                 {% call(part) utils.table_container(asset_type|capitalize ~ ' Portfolio', asset_type) %}
@@ -51,7 +51,7 @@
                     {% endif %}
                 {% endcall %}
             {% else %}
-                <p>No assets found in this category.</p>
+                <p>No assets for the {{ asset_type }} category.</p>
             {% endif %}
         {% endfor %}
     </form>
@@ -66,6 +66,7 @@
         <div id="category-selector" style="display: none; margin-top: 10px;">
             <button class="category-selector" data-category="stocks">Stocks</button>
             <button class="category-selector" data-category="crypto">Crypto</button>
+            <button class="category-selector" data-category="interest">Interest</button>
         </div>
         
         <form id="ticker-form" method="POST" action="/add/stocks" 
@@ -73,8 +74,18 @@
             <input type="hidden">
             
             <div class="form-group">
-                <label>Symbol:</label>
-                <input type="text" id="ticker" name="ticker" placeholder="E.g. AMAT" required>
+                <label id="ticker-label">Symbol:</label>
+                <input type="text" id="ticker" name="ticker" placeholder="E.g. AMAT or BNP.PA">
+            </div>
+
+            <div class="form-group" id="currency-field" style="display:none;">
+                <label>Currency:</label>
+                <select id="currency" name="currency">
+                    <option value="EUR">EUR</option>
+                    <option value="USD">USD</option>
+                    <option value="GBP">GBP</option>
+                    <option value="CHF">CHF</option>
+                </select>
             </div>
 
             <button type="submit" id="submit-button" style="margin-top: 10px;">Save Asset</button>

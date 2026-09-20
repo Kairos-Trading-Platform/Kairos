@@ -131,7 +131,9 @@ class PortfolioController extends FinAppBase {
 
         // UI render
         if (this.data) {
-            this.updateUI(this.data, 'stocks');
+            ['stocks', 'crypto', 'interest'].forEach(assetType => {
+                this.updateUI(this.data, assetType);
+            });
         }
         window.activeApp = this;
     }
@@ -161,7 +163,7 @@ class PortfolioController extends FinAppBase {
     setupGlobalListeners() {
         // Event delegation for all portfolio inputs
         document.addEventListener('change', (e) => {
-            if (e.target.matches('input[id*="_"]')) {
+            if (e.target.matches('input[id*="_"],select[id*="_"]')) {
                 this.handleInputChange(e.target);
             }
             if (e.target.id === 'free-cash-input') {
@@ -223,10 +225,11 @@ class PortfolioController extends FinAppBase {
             const govInput = document.querySelector(`input[name="gov_${ticker}"]`);
             const contInput = document.querySelector(`input[name="cont_${ticker}"]`);
             const syieldInput = document.querySelector(`input[name="syield_${ticker}"]`);
+            const iyieldInput = document.querySelector(`input[name="iyield_${ticker}"]`);
 
             if (sharesInput) {
                 // Default values to 0
-                let envVal = 0, socVal = 0, govVal = 0, contVal= 0, syieldVal=0;
+                let envVal = 0, socVal = 0, govVal = 0, contVal= 0, syieldVal=0, iyieldVal=0;
                 
                 // Only attempt to read ESG values if assetType is 'stocks'
                 if (assetType === 'stocks') {
@@ -238,7 +241,12 @@ class PortfolioController extends FinAppBase {
 
                 // Only attempt to read staking yields if assetType is 'crypto'
                 if (assetType === 'crypto') {
-                    syieldVal = syieldInput ? (parseInt(syieldInput.value) || 0) : 0;
+                    syieldVal = syieldInput ? (parseFloat(syieldInput.value) || 0) : 0;
+                }
+
+                // Only attempt to read interest yields if assetType is 'interest'
+                if (assetType === 'interest') {
+                    iyieldVal = iyieldInput ? (parseFloat(iyieldInput.value) || 0) : 0;
                 }
         
                 assets.push({
@@ -251,6 +259,7 @@ class PortfolioController extends FinAppBase {
                     gov: govVal,
                     cont: contVal,
                     syield: syieldInput ? (parseFloat(syieldInput.value) || 0.0) : 0.0,
+                    iyield: iyieldInput ? (parseFloat(iyieldInput.value) || 0.0) : 0.0,
                 });
             }
         });
@@ -294,7 +303,9 @@ class PortfolioController extends FinAppBase {
         const fieldType = inputElement.id.split('_')[0]; // Remove underscore to get the field
         
         // Determine the asset type by looking at the parent container
-        const assetType = inputElement.closest('[id$="-section"]').id.split('-')[0]; // Return 'stocks' or 'crypto'
+        const assetType = inputElement.closest('[id$="-section"]').id.split('-')[0]; // Return 'stocks', 'crypto', etc...
+
+        const isSelect = inputElement.tagName === 'SELECT';
 
         try {
             const data = await this.apiRequest(`/save_single_value/${assetType}`, {
@@ -303,7 +314,7 @@ class PortfolioController extends FinAppBase {
                 body: JSON.stringify({
                     ticker: ticker,
                     field: fieldType,
-                    value: parseFloat(value) || 0.0,
+                    value: isSelect ? value : (parseFloat(value) || 0.0),
                     asset_type: assetType
                 })
             });
@@ -367,10 +378,11 @@ class ChartManager {
         const allTotals = {
             stocks: manager.stocks.total_market_value || 0,
             crypto: manager.crypto.total_market_value || 0,
+            interest: manager.interest.total_market_value || 0,
             cash: manager.summary.free_cash || 0
         };
 
-        const categories = ['stocks', 'crypto', 'cash']; //TODO add assets
+        const categories = ['stocks','crypto','interest','cash']; //TODO add assets
         let allocLabels = [];
         let allocValues = [];
 
@@ -595,7 +607,7 @@ class PortfolioUIManager {
                     if (rawVal === undefined || rawVal === null) return;
 
                     // Check the type from get_schema()
-                    if (column.type === 'monitor_input' || el.tagName === 'INPUT') {
+                    if (column.type === 'monitor_input' || column.type === 'select_input' || el.tagName === 'INPUT') {
                         // Inputs: update .value to preserve the box
                         el.value = rawVal; 
                     } else if (column.type !== 'visualizer' && column.type !== 'ticker') {
@@ -856,6 +868,9 @@ class TickerManager {
             selector: document.getElementById('category-selector'),
             label: document.getElementById('category-label'),
             input: document.getElementById('ticker'),
+            tickerLabel: document.getElementById('ticker-label'),
+            currencyField: document.getElementById('currency-field'),
+            currencyInput: document.getElementById('currency'),
             submitBtn: document.getElementById('submit-button')
         };
     }
@@ -865,7 +880,7 @@ class TickerManager {
     }
 
     setupListeners() {
-        // Toggle the category picker (Stocks vs Crypto)
+        // Toggle the category picker
         if (this.dom.btnMain) {
             this.dom.btnMain.onclick = () => this.toggleCategoryPicker();
         }
@@ -918,12 +933,31 @@ class TickerManager {
         this.dom.form.action = `/add/${category}`;
         this.dom.label.textContent = category.charAt(0).toUpperCase() + category.slice(1);
         this.dom.input.focus();
+
+        // For the interest asset class
+        const isInterest = category === 'interest';
+
+        // Symbol becomes optional "Name" for interest, currency field appears/becomes required
+        if (this.dom.tickerLabel) {
+            this.dom.tickerLabel.textContent = isInterest ? 'Name (optional):' : 'Symbol:';
+        }
+        this.dom.input.required = !isInterest;
+
+        if (this.dom.currencyField) {
+            this.dom.currencyField.style.display = isInterest ? 'block' : 'none';
+        }
+        if (this.dom.currencyInput) {
+            this.dom.currencyInput.required = isInterest;
+        }
     }
 
     resetUI() {
         this.dom.form.style.display = 'none';
         this.dom.selector.style.display = 'none';
         this.dom.form.reset();
+        if (this.dom.currencyField) this.dom.currencyField.style.display = 'none';
+        if (this.dom.tickerLabel) this.dom.tickerLabel.textContent = 'Symbol:';
+        this.dom.input.required = true;
     }
 
     async handleAdd(e) {

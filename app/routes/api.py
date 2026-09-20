@@ -20,7 +20,7 @@ def background_check():
 
     # Fetch fresh data (respects staleness — won't download if fresh)
     portfolio = PortfolioManager.from_storage(
-        asset_classes=['stocks', 'crypto'],
+        asset_classes=['stocks','crypto','interest'],
         finance_managers=finance_managers,
         interval=interval,
         force_update=False
@@ -102,7 +102,7 @@ def _compute_sma_signals(finance_managers, interval) -> list[dict]:
 def _build_assets_payload(portfolio) -> dict:
     """Build the assets dict that NotificationManager.monitorStatusChanges expects."""
     result = {}
-    for asset_type in ['stocks', 'crypto']:
+    for asset_type in ['stocks','crypto','interest']:
         sub = getattr(portfolio, asset_type, None)
         if not sub:
             continue

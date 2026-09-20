@@ -53,6 +53,18 @@
 </div>
 {% endmacro %}
 
+{% macro render_select(ticker, field, value, options) %}
+    <select id="{{ field }}_{{ ticker }}" 
+            name="{{ field }}_{{ ticker }}"
+            autocomplete="off">
+        {% for opt in options %}
+            <option value="{{ opt }}" {% if opt == value %}selected{% endif %}>
+                {{ opt|capitalize }}
+            </option>
+        {% endfor %}
+    </select>
+{% endmacro %}
+
 {% macro asset_row(asset) %}
 <tr id="row-{{ asset.ticker }}">
     {% for col in asset.get_schema() %}
@@ -63,6 +75,8 @@
                     <button class="delete-btn" data-id="{{ asset.ticker }}">🗑️</button>
                 </div>
             </td>
+        {% elif col.type == 'select_input' %}
+            <td>{{ render_select(asset.ticker, col.id, asset[col.id], col.options) }}</td>
         {% elif col.type == 'input' %}
             <td>{{ render_input(asset.ticker, col.id, asset[col.id], placeholder=col.placeholder|default("")) }}</td>
         {% elif col.type == 'finance' %}

@@ -47,6 +47,7 @@ def create_app():
     app.config['FINANCE_MANAGERS'] = {
         'stocks': FinanceDataManager(app.config['DATA_FOLDER'], 'stocks', app_config),
         'crypto': FinanceDataManager(app.config['DATA_FOLDER'], 'crypto', app_config),
+        'interest': FinanceDataManager(app.config['DATA_FOLDER'], 'interest', app_config),
     }
     app.extensions["research_dm"] = ResearchDataManager(
         app.config['FINANCE_MANAGERS'],

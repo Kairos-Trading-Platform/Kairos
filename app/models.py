@@ -43,6 +43,9 @@ class AssetData:
     cont: int = 0
     weight: float = 0.0
     syield: float = 0.0
+    iyield: float = 0.0
+    currency_choice: str = ""     # user-picked currency, interest only
+    compounding: str = "daily" # daily/monthly/quarterly/annually
 
     fx_rates: Dict[str, float] = field(default_factory=dict)
     sector: str = field(init=False, default="Null")
@@ -70,8 +73,8 @@ class Asset(AssetData):
         self.quote_eur = self._safe_float(metrics.get("Quote_EUR"))
         self.latest_div = self._safe_float(metrics.get("Latest_Div_EUR"))
         self.months_paid = metrics.get("Months_Paid", [0]*12)
-        self.div_yield = self._safe_float(metrics.get("Div_Yield")*100)
-        self.div_growth = self._safe_float(metrics.get("Div_CAGR")*100)
+        self.div_yield = self._safe_float(metrics.get("Div_Yield",0)*100)
+        self.div_growth = self._safe_float(metrics.get("Div_CAGR",0)*100)
         self.pe_ratio = self._safe_float(metrics.get("P/E", 0))
         self.fwd_pe = self._safe_float(metrics.get("Fwd_P/E", 0))
         self.peg = self._safe_float(metrics.get("PEG", 0))
@@ -80,6 +83,23 @@ class Asset(AssetData):
         self.earnings_gr = self._safe_float(metrics.get('Earnings_Growth',0)*100)
         self.payout_ratio = self._safe_float(metrics.get('PayoutRatio',0)*100)
         self.currency = metrics.get("Currency", "USD").lower()
+
+        if self.asset_type == 'interest':
+            self.currency = (self.currency_choice or "EUR").lower()
+            self.quote = 1.0
+            self.quote_eur = self.fx_rates.get(f"{self.currency}_eur_rate", 1.0)
+
+    # Common columns for schemas
+    COLUMNS = {
+        'ticker':       {'id': 'ticker',       'label': 'Ticker',           'type': 'ticker'},
+        'shares':       {'id': 'shares',       'label': 'Shares',           'type': 'input'},
+        'price':        {'id': 'price',        'label': 'Avg Price (base)', 'type': 'input'},
+        'price_eur':    {'id': 'price_eur',    'label': 'Avg Price (€)',    'type': 'finance', 'suffix': ' €'},
+        'market_value': {'id': 'market_value', 'label': 'Value (€)',        'type': 'finance', 'suffix': ' €'},
+        'quote':        {'id': 'quote',        'label': 'Quote',            'type': 'finance'},
+        'quote_eur':    {'id': 'quote_eur',    'label': 'Quote (€)',        'type': 'finance', 'suffix': ' €'},
+        'weight':       {'id': 'weight',       'label': 'Weight',           'type': 'monitor', 'suffix': '%'},
+    }
         
     METRIC_COLOUR_RULES = {
         'stocks':{
@@ -100,7 +120,10 @@ class Asset(AssetData):
         'crypto':{
             'weight': {'low': 40, 'high': 50, 'dir': 'low_is_better'},
             'syield': {'low': 2, 'high': 4, 'dir': 'high_is_better'}
-        } 
+        },
+        'interest':{
+            'iyield': {'low': 2, 'high': 4, 'dir': 'high_is_better'}
+        }
     }
 
     # Ensure floats are retrieved from data
@@ -110,9 +133,40 @@ class Asset(AssetData):
         except (ValueError, TypeError):
             return 0.0
             
+    # @cached_property
+    # def market_value(self):
+    #     return self.shares * self.quote_eur
+
     @cached_property
-    def market_value(self):
-        return self.shares * self.quote_eur
+    def market_value(self) -> float:
+        """
+        Calculates nominal market value in base asset currency.
+        If price is present, market_value = shares * price.
+        If interest/cash (no price), market_value = shares.
+        """
+        if not self.price:
+            return float(self.shares)
+        
+        return float(self.shares) * float(self.price)
+
+    @cached_property
+    def market_value_eur(self) -> float:
+        """
+        Evaluates market value in EUR.
+        For interest/cash: uses nominal shares * FX rate.
+        For market assets: uses shares * quote_eur (or price * fx_rate).
+        """
+        fx = getattr(self, 'fx_rate', 1.0) or 1.0
+        
+        # Interest / cash assets (no unit price)
+        if self.asset_type == 'interest' or not getattr(self, 'price', None):
+            return float(self.shares) * float(fx)
+            
+        # Standard market assets
+        if hasattr(self, 'quote_eur') and self.quote_eur is not None:
+            return float(self.shares) * float(self.quote_eur)
+            
+        return float(self.shares) * float(self.price) * float(fx)
         
     @cached_property
     def cost_basis(self):
@@ -148,17 +202,21 @@ class Asset(AssetData):
     
     # Define schema for the HTML renderer
     def get_schema(self):
-        # Common columns
-        schema = [
-            {'id': 'ticker', 'label': 'Ticker', 'type': 'ticker'},
-            {'id': 'shares','label': 'Shares', 'type': 'input'},
-            {'id': 'price', 'label': 'Avg Price (base)', 'type': 'input'},
-            {'id': 'price_eur', 'label': 'Avg Price (€)', 'type': 'finance', 'suffix': ' €'},
-            {'id': 'market_value', 'label': 'Value (€)', 'type': 'finance', 'suffix': ' €'},
-            {'id': 'quote', 'label': 'Quote', 'type': 'finance'},
-            {'id': 'quote_eur', 'label': 'Quote (€)', 'type': 'finance', 'suffix': ' €'},
-            {'id': 'weight', 'label': 'Weight', 'type': 'monitor', 'suffix': '%'},
-        ]
+        # Schema for metricless assets
+        if self.asset_type == 'interest':
+            return [
+                {**self.COLUMNS['ticker'], 'label': 'Name'},
+                {'id': 'currency', 'label': 'Currency', 'type': 'text'},
+                {**self.COLUMNS['shares'], 'label': 'Amount'},
+                {**self.COLUMNS['market_value'], 'label': 'Amount (€)'},
+                {**self.COLUMNS['weight']},
+                {'id': 'iyield', 'label': 'Interest rate', 'type': 'monitor_input', 'suffix': '%'},
+                {'id': 'compounding', 'label': 'Compounding rate', 'type': 'select_input',
+                'options': ['daily', 'monthly', 'quarterly', 'annually']},
+            ]
+
+        schema = [self.COLUMNS[c] for c in
+                  ('ticker', 'shares', 'price', 'price_eur', 'market_value', 'quote', 'quote_eur', 'weight')]
 
         # Category-specific columns
         if self.asset_type == 'stocks':
@@ -181,9 +239,13 @@ class Asset(AssetData):
                 {'id': 'currency',    'label': 'Curr',        'type': 'text'},
                 {'id': 'sector',      'label': 'Sector',      'type': 'text'},
             ]
-        else:
+        elif self.asset_type == 'crypto':
             schema += [
                 {'id': 'syield', 'label': 'Staking yield', 'type': 'monitor_input', 'suffix': '%'}
+            ]
+        else:
+            schema += [
+                {'id': 'iyield', 'label': 'Interest yield', 'type': 'monitor_input', 'suffix': '%'}
             ]
         return schema
     
@@ -219,9 +281,9 @@ class Portfolio:
         self.assets = assets
         self.update_weights()
 
-    @cached_property
+    @property
     def total_market_value(self):
-        return sum(asset.market_value for asset in self.assets)
+        return sum(asset.market_value_eur for asset in self.assets)
         
     @property
     def total_cost_basis(self):
@@ -285,7 +347,13 @@ class Portfolio:
         if total_mv > 0:
             return float(total_income / total_mv)
 
-        
+    @property
+    def portfolio_iyield(self):
+        total_mv = self.total_market_value
+        total_income = sum(asset.market_value * asset.iyield for asset in self.assets)
+        if total_mv > 0:
+            return float(total_income / total_mv)
+ 
     @property
     def sectors(self):
         sectors = {}
@@ -302,7 +370,7 @@ class Portfolio:
         total_mv = self.total_market_value
         if self.total_market_value > 0:
             for asset in self.assets:
-                asset.weight = (asset.market_value / total_mv) * 100
+                asset.weight = (asset.market_value_eur / total_mv) * 100
         else:
             for asset in self.assets:
                 asset.weight = 0
@@ -314,7 +382,11 @@ class Portfolio:
             },
         'crypto':{
             'syield': {'low': 2, 'high': 4, 'dir': 'high_is_better'}
-        } 
+        },
+        'interest':{
+            'iyield': {'low': 2, 'high': 4, 'dir': 'high_is_better'}
+        }
+
     }
 
     # Define schema for the HTML renderer
@@ -326,7 +398,7 @@ class Portfolio:
         asset_schema = self.assets[0].get_schema()
         
         if configs is None:
-            configs = {m: self.get_metric_config(m, asset_type) for m in ['div_yield', 'div_growth', 'syield']}
+            configs = {m: self.get_metric_config(m, asset_type) for m in ['div_yield', 'div_growth', 'syield', 'iyield']}
 
         # Define which IDs in the schema should have footer values
         if asset_type == 'stocks':
@@ -341,12 +413,18 @@ class Portfolio:
                 'months_paid': {'type': 'visualizer'},
                 'annual_dividend': {'val': self.annual_dividends, 'id': 'annual-dividends', 'type': 'finance', 'suffix': ' €'},
             }
-        else:
+        elif asset_type == 'crypto':
             footer_map = {
                 'ticker': {'label': 'Total Crypto', 'class': 'font-bold'},
-                'price_eur': {'val': self.total_cost_basis, 'id': 'total-cost-basis-crypto', 'type': 'finance'},
-                'market_value': {'val': self.total_market_value, 'id': 'total-market-value-crypto', 'type': 'finance'},
+                'price_eur': {'val': self.total_cost_basis, 'id': 'total-cost-basis-crypto', 'type': 'finance', 'suffix':'€'},
+                'market_value': {'val': self.total_market_value, 'id': 'total-market-value-crypto', 'type': 'finance', 'suffix':'€'},
                 'syield':{'val': self.portfolio_syield, 'id': 'portfolio_syield', 'type': 'monitor', 'suffix': '%', 'bg_class': configs['syield']['class']},
+            }
+        elif asset_type == 'interest':
+            footer_map = {
+                'currency': {'label': 'Total Interest', 'class': 'font-bold'},
+                'market_value': {'val': self.total_market_value, 'id': 'total_market_value-interest', 'type': 'finance', 'suffix':'€'},
+                'iyield':{'val': self.portfolio_iyield, 'id': 'portfolio_iyield', 'type': 'monitor', 'suffix': '%', 'bg_class': configs['iyield']['class']},
             }
 
         resolved_footer = []
@@ -395,6 +473,7 @@ class Portfolio:
             'annual_dividends': self.annual_dividends,
             'portfolio_yield_data': vars(self.portfolio_yield_data),
             'portfolio_syield': self.portfolio_syield,
+            'portfolio_iyield': self.portfolio_iyield,
             'sectors': vars(self.sectors),
             'status_colors': {m: cfg['class'] for m, cfg in metric_configs.items()},
             'footer': self.get_footer(asset_type, metric_configs)
@@ -418,18 +497,25 @@ class PortfolioLoader:
             'gov':    manager.get_data('gov'),
             'cont':   manager.get_data('cont'),
             'syield': manager.get_data('syield'),
-            'fx_rates': portfolio_mgr.get_forex_rates()
+            'iyield': manager.get_data('iyield'),
+            'fx_rates': portfolio_mgr.get_forex_rates(),
+            'currency_choice': manager.get_data('currency'),
+            'compounding': manager.get_data('compounding')
         }
         return asset_data
 
 
 # Define the complete portfolio
 class PortfolioManager:
+    # Asset types whose Asset objects need FinanceDataManager metrics.
+    # Everything else (e.g. 'interest') just needs ticker + user inputs.
+    METRIC_ASSET_TYPES = {'stocks', 'crypto'}
+
     def __init__(self, portfolios_dict, free_cash=0.0, silent=False):
         self._portfolios = portfolios_dict
         self.free_cash = free_cash
         # Set attributes based on asset classes (stocks, crypto, etc.)
-        for name, portfolio_obj in portfolios_dict.items():
+        for name, portfolio_obj in self._portfolios.items():
             setattr(self, name, portfolio_obj)
             
         # Show summary
@@ -520,12 +606,13 @@ class PortfolioManager:
         for asset_type in asset_classes:
             dm = AssetDataManager(asset_type)
             tickers = dm.tickers
-            fm = finance_managers[asset_type]
-            # Fetch metrics
-            raw_metrics = fm.get_metrics(
-                tickers, interval=interval, force=force_update
-            )
-            
+
+            if asset_type in cls.METRIC_ASSET_TYPES:
+                fm = finance_managers[asset_type]
+                raw_metrics = fm.get_metrics(tickers, interval=interval, force=force_update)
+            else:
+                raw_metrics = [{'Ticker': t, 'Value': 0} for t in tickers]
+
             # Load user-specific data
             data = PortfolioLoader.load_asset_data(asset_type)
             
@@ -542,7 +629,10 @@ class PortfolioManager:
                     gov=data['gov'].get(t, 0),
                     cont=data['cont'].get(t, 0),
                     syield=data['syield'].get(t, 0),
-                    fx_rates=data['fx_rates']
+                    iyield=data['iyield'].get(t, 0),
+                    fx_rates=data['fx_rates'],
+                    currency_choice=data['currency_choice'].get(t, ''),
+                    compounding=data['compounding'].get(t, 'daily'),
                 ) for t in tickers
             ]
             
@@ -558,41 +648,55 @@ class PortfolioManager:
         No network calls, no staleness checks.
         """
         portfolios = {}
+
+        # Initialise portfolios with all asset types, even if empty
         for asset_type in asset_classes:
-            dm = AssetDataManager(asset_type)
-            tickers = dm.tickers
-        
-            fm = finance_managers[asset_type]
+            portfolios[asset_type] = None  # Placeholder
             
-            # Read directly from in-memory cache, fall back to disk JSON
-            if not fm._static_metrics:
-                fm._static_metrics = fm._load_json(
-                    fm._metrics_path, default={}
-                )
-            
-            raw_metrics = [
-                fm._static_metrics[t] 
-                for t in tickers 
-                if t in fm._static_metrics
-            ]
-            
-            data = PortfolioLoader.load_asset_data(asset_type)
-            assets = [
-                Asset(
-                    ticker=t,
-                    metrics=next(m for m in raw_metrics if m['Ticker'] == t),
-                    asset_type=asset_type,
-                    shares=data['shares'].get(t, 0),
-                    price=data['price'].get(t, 0),
-                    env=data['env'].get(t, 0),
-                    soc=data['soc'].get(t, 0),
-                    gov=data['gov'].get(t, 0),
-                    cont=data['cont'].get(t, 0),
-                    syield=data['syield'].get(t, 0),
-                    fx_rates=data['fx_rates']
-                ) for t in tickers if t in fm._static_metrics
-            ]
-            portfolios[asset_type] = Portfolio(assets)
+        for asset_type in asset_classes:
+            try:
+                dm = AssetDataManager(asset_type)
+                tickers = dm.tickers
+
+                if asset_type in cls.METRIC_ASSET_TYPES:
+                    if asset_type not in finance_managers:
+                        logger.warning(f"No finance manager found for '{asset_type}'. Skipping.")
+                        continue
+                
+                    fm = finance_managers[asset_type]
+                    
+                    # Read directly from in-memory cache, fall back to disk JSON
+                    if not fm._static_metrics:
+                        fm._static_metrics = fm._load_json(fm._metrics_path, default={})
+                    raw_metrics = [fm._static_metrics[t] for t in tickers if t in fm._static_metrics]
+                    valid_tickers = [t for t in tickers if t in fm._static_metrics]
+                else:
+                    raw_metrics = [{'Ticker': t, 'Value': 0} for t in tickers]
+                    valid_tickers = tickers
+                
+                data = PortfolioLoader.load_asset_data(asset_type)
+                assets = [
+                    Asset(
+                        ticker=t,
+                        metrics=next(m for m in raw_metrics if m['Ticker'] == t),
+                        asset_type=asset_type,
+                        shares=data['shares'].get(t, 0),
+                        price=data['price'].get(t, 0),
+                        env=data['env'].get(t, 0),
+                        soc=data['soc'].get(t, 0),
+                        gov=data['gov'].get(t, 0),
+                        cont=data['cont'].get(t, 0),
+                        syield=data['syield'].get(t, 0),
+                        iyield=data['iyield'].get(t, 0),
+                        fx_rates=data['fx_rates'],
+                        currency_choice=data['currency_choice'].get(t, ''),
+                        compounding=data['compounding'].get(t, 'daily'),
+                    ) for t in valid_tickers
+                ]
+                portfolios[asset_type] = Portfolio(assets)
+            except Exception as e:
+                logger.error(f"Error processing asset type '{asset_type}': {e}")
+                portfolios[asset_type] = Portfolio([])  # Ensure empty Portfolio is set
 
         free_cash = PortfolioDataManager().get_cash()
         return cls(portfolios, free_cash=free_cash)
@@ -607,8 +711,11 @@ def get_metric_config(self, name, rule, asset_type):
         return {'val': 0, 'class': ''}
     
     # Logic to find the value on Asset vs Portfolio
+    portfolio_attr = f"portfolio_{name}"
     if hasattr(self, name):
         val = getattr(self, name, 0)
+    elif hasattr(self, portfolio_attr):
+        val = getattr(self, portfolio_attr, 0)
     elif hasattr(self, 'portfolio_yield_data'):
         # Look inside the yield data namespace for Portfolio
         val = getattr(self.portfolio_yield_data, name, 0)

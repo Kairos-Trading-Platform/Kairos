@@ -51,7 +51,8 @@ class AssetDataManager(JSONPersistenceManager):
         self.data = self.load(self.filename, default={
             'tickers': [],
             'shares': {}, 'price': {}, 'env': {}, 
-            'soc': {}, 'gov': {}, 'cont': {}, 'syield': {}
+            'soc': {}, 'gov': {}, 'cont': {}, 'syield': {}, 'iyield': {},
+            'fx_rates': {}, 'currency_choice':{}, 'compounding':{}
         })
 
     @property

@@ -145,10 +145,11 @@ tr:nth-child(even) { background-color: #f9f9f9; }
 }
 
 /* Inputs */
-input {
+input, select {
     background: transparent;
     border: 1px solid rgba(255,255,255,0.2);
     border-radius: 5px;
+    color: inherit;
     font-weight: bold;
     text-align: center;
     outline: none;
@@ -163,17 +164,21 @@ input {
     width: 15ch;
 }
 
+[id^="compounding"] {
+    width: 12ch;
+}
+
 input[id^="env"], input[id^="soc"], input[id^="gov"], input[id^="cont"] {
     width: 2ch;
 }
 
 
-input:hover {
+input:hover, select:hover {
     background: rgba(255,255,255,0.15) !important;
     border-color: #3498db !important;
 }
 
-input:focus {
+input:focus, select:focus {
     background: rgba(255,255,255,0.2) !important;
     border-color: #2ecc71 !important;
     box-shadow: 0 0 10px rgba(46, 204, 113, 0.3);

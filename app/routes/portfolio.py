@@ -15,6 +15,7 @@ bp = Blueprint('portfolio', __name__)
 def portfolio_feature():
     app_config = current_app.config['APP_CONFIG']
     data = get_portfolio_data_from_cache()
+    print(data['portfolio'].keys())
     
     return render_template(
         'portfolio.html',
@@ -22,39 +23,6 @@ def portfolio_feature():
         portfolio=data['portfolio'],
         income_plot=data['income_plot'].to_html(full_html=False, include_plotlyjs='cdn')
     )
-
-# @timed
-# def get_portfolio_data(force_update=False):
-#     interval = current_app.config['APP_CONFIG'].get("live_interval")
-#     finance_managers = current_app.config['FINANCE_MANAGERS']
-
-#     # TODO automatic asset classes handling
-#     portfolio = PortfolioManager.from_storage(
-#         asset_classes=['stocks', 'crypto'],
-#         finance_managers=finance_managers,
-#         interval=interval,
-#         force_update=force_update
-#     )
-
-#     income_plot = plotting_utils.create_income_plot(portfolio.total_income_data)
-
-#     return {
-#         'portfolio': portfolio,
-#         'income_plot': income_plot
-#     }
-
-
-# # TODO remove this function?
-# @bp.route('/update_portfolio_cache', methods=['POST'])
-# @timed
-# def update_portfolio_cache():
-#     """ Loads cached data when app opens. """                       
-#     data = get_portfolio_data()
-        
-#     return jsonify({
-#         'portfolio': data['portfolio'].to_dict(),
-#         'income_plot': data['income_plot'].to_json()
-#     })
      
 @bp.route('/update_portfolio_data', methods=['POST'])
 def update_portfolio_data():
@@ -73,7 +41,7 @@ def get_portfolio_data_from_cache():
     """Rebuild portfolio math from cached metrics only."""
     finance_managers = current_app.config['FINANCE_MANAGERS']        
     portfolio = PortfolioManager.from_cache(  
-        asset_classes=['stocks', 'crypto'],
+        asset_classes=['stocks','crypto','interest'],
         finance_managers=finance_managers,
     )
     income_plot = plotting_utils.create_income_plot(portfolio.total_income_data)
@@ -90,7 +58,7 @@ def save_single_value(asset_type):
     field = data.get('field')
     value = data.get('value')
     
-    if not all([ticker, field, isinstance(value, (int, float))]):
+    if not all([ticker, field]) or value in (None, ''):
         return jsonify({'status': 'error', 'message': 'Invalid data received.'}), 400
         
     # Get the current portfolio state BEFORE the update
@@ -108,7 +76,8 @@ def save_single_value(asset_type):
 
     # Update metric
     manager = AssetDataManager(asset_type)
-    manager.update_ticker_metric(ticker, field, max(0.0, value))
+    clean_value = max(0.0, value) if isinstance(value, (int, float)) else value
+    manager.update_ticker_metric(ticker, field, clean_value)
     portfolio_data = get_portfolio_data_from_cache()
 
     # Get the fresh portfolio state AFTER the update
@@ -175,6 +144,16 @@ def add_asset(asset_class):
     if not ticker:
         return jsonify({"status": "error", "message": "No ticker provided"}), 400
 
+    if asset_class == 'interest':
+        currency = request.form.get('currency', '').upper().strip()
+        if not currency:
+            return jsonify({"status": "error", "message": "Currency is required"}), 400
+        if not ticker:
+            ticker = f"{currency}" 
+    elif not ticker:
+        return jsonify({"status": "error", "message": "No ticker provided"}), 400
+
+
     logger.debug(f"[ADD_ASSET] ticker={ticker}, asset_class={asset_class}")
     manager = AssetDataManager(asset_class)
     current_tickers = manager.tickers
@@ -187,14 +166,20 @@ def add_asset(asset_class):
     logger.info(f"Added {ticker} to {asset_class} portfolio.")
 
     # Download data for the new ticker before responding
-    finance_manager = current_app.config['FINANCE_MANAGERS'][asset_class]
-    live_interval = current_app.config['APP_CONFIG'].get("live_interval")
-    research_interval = current_app.config['APP_CONFIG'].get("research_interval")
+    if asset_class in ('stocks','crypto'):
+        finance_manager = current_app.config['FINANCE_MANAGERS'][asset_class]
+        live_interval = current_app.config['APP_CONFIG'].get("live_interval")
+        research_interval = current_app.config['APP_CONFIG'].get("research_interval")
+        
+        finance_manager._ensure_prices([ticker], live_interval, force=True)
+        if research_interval != live_interval:
+            finance_manager._ensure_prices([ticker], research_interval, force=True)
+
+        finance_manager.get_metrics(manager.tickers, interval=live_interval, force=False)
+    elif asset_class == 'interest':
+        manager.update_ticker_metric(ticker, 'currency', currency)
+        manager.update_ticker_metric(ticker, 'compounding', 'annually')  # default, user edits later
     
-    finance_manager._ensure_prices([ticker], live_interval, force=True)
-    if research_interval != live_interval:
-        finance_manager._ensure_prices([ticker], research_interval, force=True)
-    finance_manager.get_metrics(manager.tickers, interval=live_interval, force=False)
     return jsonify({"status": "success", "message": f"{ticker} added"}), 200
   
 @bp.route('/delete/<asset_class>/<ticker>', methods=['POST'])

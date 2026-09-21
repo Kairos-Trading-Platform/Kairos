@@ -15,7 +15,6 @@ bp = Blueprint('portfolio', __name__)
 def portfolio_feature():
     app_config = current_app.config['APP_CONFIG']
     data = get_portfolio_data_from_cache()
-    print(data['portfolio'].keys())
     
     return render_template(
         'portfolio.html',
@@ -39,11 +38,16 @@ def update_portfolio_data():
 @timed
 def get_portfolio_data_from_cache():
     """Rebuild portfolio math from cached metrics only."""
-    finance_managers = current_app.config['FINANCE_MANAGERS']        
+    finance_managers = current_app.config['FINANCE_MANAGERS']       
+    portfolio_store = current_app.config['PORTFOLIO_STORE'] 
     portfolio = PortfolioManager.from_cache(  
         asset_classes=['stocks','crypto','interest'],
         finance_managers=finance_managers,
+        portfolio_store=portfolio_store
     )
+    income = portfolio.total_income_data
+    # logger.debug(f"[DEBUG] income breakdown: stocks={income.get('stocks')}, "
+    #         f"crypto={income.get('crypto')}, interest={income.get('interest')}")
     income_plot = plotting_utils.create_income_plot(portfolio.total_income_data)
     return {'portfolio': portfolio, 'income_plot': income_plot} 
 
@@ -130,7 +134,8 @@ def save_cash():
     cash_value = data.get('cash', 0)
     
     #storage_utils.save_cash(cash_value)
-    PortfolioDataManager().save_cash(cash_value)
+    #PortfolioDataManager().save_cash(cash_value)
+    current_app.config['PORTFOLIO_STORE'].save_cash(cash_value)
 
     # Store in session so it persists for the user
     session['free_cash'] = float(cash_value)

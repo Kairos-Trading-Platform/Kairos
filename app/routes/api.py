@@ -15,6 +15,7 @@ def background_check():
     Returns fresh portfolio data, SMA crossover signals, and current alerts.
     """
     finance_managers = current_app.config['FINANCE_MANAGERS']
+    portfolio_store = current_app.config['PORTFOLIO_STORE']
     app_config = current_app.config['APP_CONFIG']
     interval = app_config.get("live_interval")
 
@@ -22,6 +23,7 @@ def background_check():
     portfolio = PortfolioManager.from_storage(
         asset_classes=['stocks','crypto','interest'],
         finance_managers=finance_managers,
+        portfolio_store=portfolio_store,
         interval=interval,
         force_update=False
     )

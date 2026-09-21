@@ -515,25 +515,57 @@ def plot_efficient_frontier_and_portfolios(
 def create_income_plot(income_data, title="Expected monthly income"):
     months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-    # Create Plotly figure
-    fig = go.Figure(data=[
-        go.Bar(
-            x=months,
-            y=income_data['payouts'],
-            marker_color=['#28a745' if amount > 0 else '#cccccc' for amount in income_data['payouts']],
-            hovertext=income_data['details'],
-            hovertemplate='%{hovertext}<extra></extra>', # <extra></extra> removes the secondary 'trace' box
-            name=title
-        )
-    ])
+    source_colors = {
+        'stocks':   '#28a745',  # green - dividends
+        'crypto':   '#f39c12',  # orange - staking rewards
+        'interest': '#3498db',  # blue - interest rewards
+    }
+    source_labels = {
+        'stocks': 'Dividends',
+        'crypto': 'Staking',
+        'interest': 'Interests',
+    }
 
-    # Update layout for a non-static look
-    fig.update_layout(
+    # Create Plotly figure
+    # fig = go.Figure(data=[
+    #     go.Bar(
+    #         x=months,
+    #         y=income_data['payouts'],
+    #         marker_color=['#28a745' if amount > 0 else '#cccccc' for amount in income_data['payouts']],
+    #         hovertext=income_data['details'],
+    #         hovertemplate='%{hovertext}<extra></extra>', # <extra></extra> removes the secondary 'trace' box
+    #         name=title
+    #     )
+    # ])
+
+    # # Update layout for a non-static look
+    # fig.update_layout(
+    #     title=title + ' (€)',
+    #     xaxis_title='Month',
+    #     hovermode="x unified",
+    #     margin=dict(l=20, r=20, t=50, b=20)
+    # )
+
+    fig = go.Figure()
+
+    for source, color in source_colors.items():
+        payouts = income_data.get(source)
+        if not payouts or not any(payouts):
+            continue
+        fig.add_trace(go.Bar(
+            x=months,
+            y=payouts,
+            name=source_labels[source],
+            marker_color=color,
+            hovertemplate=f'{source_labels[source]}: €%{{y:.2f}}<extra></extra>',
+        ))
+
+    fig.update_layout(**_base_layout(
         title=title + ' (€)',
+        barmode='stack',
         xaxis_title='Month',
-        hovermode="x unified",
-        margin=dict(l=20, r=20, t=50, b=20)
-    )
+        hovermode='x unified',
+    ))
     
     return fig
 

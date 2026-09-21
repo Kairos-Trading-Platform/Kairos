@@ -8,6 +8,7 @@ from scipy.stats import linregress
 import json
 from app.utils.config import AppConfig, STALE_THRESHOLD, INTERVAL_MAX_LOOKBACK
 from app.utils.time_debug import timed
+from app.utils.storage_utils import PortfolioDataManager
 import logging
 logger = logging.getLogger(__name__)
 
@@ -54,12 +55,13 @@ class FinanceDataManager:
         "1d":  timedelta(days=365),
     }
 
-    def __init__(self, cache_dir: str, category_name: str, config: AppConfig):
+    def __init__(self, cache_dir: str, category_name: str, config: AppConfig, portfolio_store: PortfolioDataManager):
         self.config = config
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True) 
 
         self.category = category_name
+        self._portfolio_store = portfolio_store
 
         # Pull constants from config module
         self.STALE_THRESHOLD = STALE_THRESHOLD
@@ -106,28 +108,31 @@ class FinanceDataManager:
         if self._usd_eur is not None:
             return
         
-        date_cache_path = os.path.join(self.cache_dir, f"last_fetch_date.json")
+        #date_cache_path = os.path.join(self.cache_dir, f"last_fetch_date.json")
         
         # Default fallback values
-        exchange_data = {
-            "last_call_fx": "1900-01-01",
-            "usd_eur_rate": 1.0,
-            "chf_eur_rate": 1.0
-        }
-        
-        # Save new values
-        if os.path.exists(date_cache_path) and os.path.getsize(date_cache_path) > 0:
-            try:
-                with open(date_cache_path, 'r') as f:
-                    exchange_data.update(json.load(f))
-                logger.info(f"\nLoaded last exchange rate: {exchange_data["last_call_fx"]}")
-            except (json.JSONDecodeError, IOError) as e:
-                logger.warning(f"Date cache file corrupted or empty, ignoring: {e}")
-        else:
-            logger.warning("\nDate cache file is 0 bytes, ignoring.")
-            
-        # Get last time function was called
+        # exchange_data = {
+        #     "last_call_fx": "1900-01-01",
+        #     "usd_eur_rate": 1.0,
+        #     "chf_eur_rate": 1.0
+        # }
+
+        exchange_data = self._portfolio_store.get_fx_cache()
         last_call_fx = datetime.strptime(exchange_data["last_call_fx"], "%Y-%m-%d").date()
+
+        # # Save new values
+        # if os.path.exists(date_cache_path) and os.path.getsize(date_cache_path) > 0:
+        #     try:
+        #         with open(date_cache_path, 'r') as f:
+        #             exchange_data.update(json.load(f))
+        #         logger.info(f"\nLoaded last exchange rate: {exchange_data["last_call_fx"]}")
+        #     except (json.JSONDecodeError, IOError) as e:
+        #         logger.warning(f"Date cache file corrupted or empty, ignoring: {e}")
+        # else:
+        #     logger.warning("\nDate cache file is 0 bytes, ignoring.")
+            
+        # # Get last time function was called
+        # last_call_fx = datetime.strptime(exchange_data["last_call_fx"], "%Y-%m-%d").date()
         logger.debug("last_call_fx: {last_call_fx}")
         
         # Lazy loading logic (once per day)
@@ -136,19 +141,18 @@ class FinanceDataManager:
 
             try:
                 # Fetch EUR/USD rate
-                eur_usd_ticker = yf.Ticker("EURUSD=X")
-                eur_usd_hist = eur_usd_ticker.history(period="1d")
+                eur_usd_hist = yf.Ticker("EURUSD=X").history(period="1d")
                 if not eur_usd_hist.empty and eur_usd_hist["Close"].dropna().iloc[-1] > 0:
                     exchange_data["usd_eur_rate"] = 1 / eur_usd_hist["Close"].dropna().iloc[-1] # Reciprocal (want EUR)
                 
                 # Fetch EUR/CHF rate
-                eur_chf_ticker = yf.Ticker("EURCHF=X")
-                eur_chf_hist = eur_chf_ticker.history(period="1d")
+                eur_chf_hist = yf.Ticker("EURCHF=X").history(period="1d")
                 if not eur_chf_hist.empty and eur_chf_hist["Close"].dropna().iloc[-1] > 0:
                     exchange_data["chf_eur_rate"] = 1 / eur_chf_hist["Close"].dropna().iloc[-1] # Reciprocal (want EUR)
                     
                 exchange_data["last_call_fx"] = date.today().isoformat()
-                self._save_json(date_cache_path, exchange_data)
+                #self._save_json(date_cache_path, exchange_data)
+                self._portfolio_store.save_fx_cache(exchange_data)
                 
             except Exception as e:
                 logger.error(f"Error fetching exchange rates: {e}. Using last known/default rates.")

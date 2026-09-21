@@ -4,6 +4,7 @@ from app.utils.config import AppConfig
 from app.utils.finance_data import FinanceDataManager
 from app.services.data_fetching import ResearchDataManager
 from app.utils.news_data import NewsDataManager
+from app.utils.storage_utils import PortfolioDataManager
 from config import Config
 import logging
 
@@ -34,6 +35,9 @@ def create_app():
     logging.getLogger('yfinance').setLevel(logging.WARNING)
     logging.getLogger('urllib3').setLevel(logging.WARNING)  # HTTP connection pool logs
     logging.getLogger('asyncio').setLevel(logging.WARNING)  # async internals
+    # Numba internal logger
+    # yfinance internal loggers
+    logging.getLogger('numba').setLevel(logging.WARNING)
 
     ### Keep these verbose during development
     logging.getLogger('app.utils.finance_data').setLevel(logging.INFO)
@@ -44,10 +48,14 @@ def create_app():
     # User config (intervals, CAGR years, etc.)
     app_config = AppConfig(app.config['USER_CONFIG_PATH'])
     app.config['APP_CONFIG'] = app_config   # attach to app for access in routes
+
+    portfolio_store = PortfolioDataManager(app.config['DATA_FOLDER'])
+    app.config['PORTFOLIO_STORE'] = portfolio_store  # so routes can reuse the same instance
+
     app.config['FINANCE_MANAGERS'] = {
-        'stocks': FinanceDataManager(app.config['DATA_FOLDER'], 'stocks', app_config),
-        'crypto': FinanceDataManager(app.config['DATA_FOLDER'], 'crypto', app_config),
-        'interest': FinanceDataManager(app.config['DATA_FOLDER'], 'interest', app_config),
+        'stocks': FinanceDataManager(app.config['DATA_FOLDER'], 'stocks', app_config, portfolio_store),
+        'crypto': FinanceDataManager(app.config['DATA_FOLDER'], 'crypto', app_config, portfolio_store),
+        'interest': FinanceDataManager(app.config['DATA_FOLDER'], 'interest', app_config, portfolio_store),
     }
     app.extensions["research_dm"] = ResearchDataManager(
         app.config['FINANCE_MANAGERS'],

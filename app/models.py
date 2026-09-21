@@ -4,8 +4,33 @@ from typing import List, Dict, Any
 from app.utils.storage_utils import AssetDataManager, PortfolioDataManager
 from app.utils.time_debug import timed
 from functools import cached_property
+import numpy as np
+from numba import njit
+from datetime import date, timedelta
 import logging
 logger = logging.getLogger(__name__)
+
+@njit(cache=True)
+def _compound_daily_income(principal: float, annual_rate: float,
+                            periods_per_year: int, n_days: int) -> np.ndarray:
+    """Numba-jitted daily compounding: income earned on each of n_days days."""
+    daily_rate = (1.0 + annual_rate / periods_per_year) ** (periods_per_year / 365.0) - 1.0
+    income = np.empty(n_days)
+    balance = principal
+    for i in range(n_days):
+        earned = balance * daily_rate
+        income[i] = earned
+        balance += earned
+    return income
+
+
+def _projection_horizon_end(today: date) -> date:
+    """End of the month before the 1-year anniversary of `today`."""
+    try:
+        anniversary = today.replace(year=today.year + 1)
+    except ValueError:  # Feb 29
+        anniversary = today.replace(year=today.year + 1, day=28)
+    return anniversary.replace(day=1) - timedelta(days=1)
 
 # class Metric:
 #     def __init__(self, id, label, type="finance",
@@ -96,6 +121,7 @@ class Asset(AssetData):
         'price':        {'id': 'price',        'label': 'Avg Price (base)', 'type': 'input'},
         'price_eur':    {'id': 'price_eur',    'label': 'Avg Price (€)',    'type': 'finance', 'suffix': ' €'},
         'market_value': {'id': 'market_value', 'label': 'Value (€)',        'type': 'finance', 'suffix': ' €'},
+        'market_value_eur': {'id': 'market_value_eur', 'label': 'Value (€)', 'type': 'finance', 'suffix': ' €'},
         'quote':        {'id': 'quote',        'label': 'Quote',            'type': 'finance'},
         'quote_eur':    {'id': 'quote_eur',    'label': 'Quote (€)',        'type': 'finance', 'suffix': ' €'},
         'weight':       {'id': 'weight',       'label': 'Weight',           'type': 'monitor', 'suffix': '%'},
@@ -126,16 +152,57 @@ class Asset(AssetData):
         }
     }
 
+    ANNUAL_COMPOUNDING_PERIODS = {'daily': 365, 'monthly': 12, 'quarterly': 4, 'annually': 1}
+
     # Ensure floats are retrieved from data
     def _safe_float(self, val):
         try:
             return float(val) if val is not None else 0.0
         except (ValueError, TypeError):
             return 0.0
-            
-    # @cached_property
-    # def market_value(self):
-    #     return self.shares * self.quote_eur
+
+    @property
+    def annual_yield(self) -> float:
+        if self.asset_type == 'crypto':
+            return self.syield / 100
+        if self.asset_type == 'interest':
+            return self.iyield / 100
+        return 0.0
+
+    @property
+    def compounding_periods_per_year(self) -> int:
+        if self.asset_type == 'crypto':
+            return 365  # staking rewards compound daily
+        return self.ANNUAL_COMPOUNDING_PERIODS.get(self.compounding, 365)
+
+    def get_monthly_income(self):
+        if self.asset_type in ('crypto', 'interest'):
+            return self._projected_monthly_income()
+        if not hasattr(self, 'months_paid'):
+            return [0.0] * 12
+        return [self.latest_div * self.shares if m == 1 else 0.0 for m in self.months_paid]
+
+    def _projected_monthly_income(self) -> list:
+        """Compounded daily rewards, bucketed by calendar month, for the next 12 months
+        (today -> end of month before the 1-year anniversary)."""
+        monthly = [0.0] * 12
+        principal = self.market_value_eur
+        # logger.debug(f"[DEBUG] {self.ticker} ({self.asset_type}): "
+        #         f"shares={self.shares}, quote_eur={self.quote_eur}, "
+        #         f"principal={principal}, annual_yield={self.annual_yield}, "
+        #         f"syield={self.syield}, iyield={self.iyield}")
+        if principal <= 0 or self.annual_yield <= 0:
+            return monthly
+
+        today = date.today()
+        n_days = (_projection_horizon_end(today) - today).days + 1
+        daily_income = _compound_daily_income(
+            principal, self.annual_yield, self.compounding_periods_per_year, n_days
+        )
+        for offset, amount in enumerate(daily_income):
+            m = (today + timedelta(days=offset)).month - 1
+            monthly[m] += amount
+        return monthly  
 
     @cached_property
     def market_value(self) -> float:
@@ -147,26 +214,11 @@ class Asset(AssetData):
         if not self.price:
             return float(self.shares)
         
-        return float(self.shares) * float(self.price)
+        return float(self.shares) * float(self.quote)
 
     @cached_property
     def market_value_eur(self) -> float:
-        """
-        Evaluates market value in EUR.
-        For interest/cash: uses nominal shares * FX rate.
-        For market assets: uses shares * quote_eur (or price * fx_rate).
-        """
-        fx = getattr(self, 'fx_rate', 1.0) or 1.0
-        
-        # Interest / cash assets (no unit price)
-        if self.asset_type == 'interest' or not getattr(self, 'price', None):
-            return float(self.shares) * float(fx)
-            
-        # Standard market assets
-        if hasattr(self, 'quote_eur') and self.quote_eur is not None:
-            return float(self.shares) * float(self.quote_eur)
-            
-        return float(self.shares) * float(self.price) * float(fx)
+        return float(self.shares) * float(self.quote_eur)
         
     @cached_property
     def cost_basis(self):
@@ -190,10 +242,6 @@ class Asset(AssetData):
     def asset_income(self):
         return self.market_value * self.div_yield
         
-    def get_monthly_income(self):
-        if not hasattr(self, 'months_paid'): return [0.0] * 12
-        return [self.latest_div * self.shares if m == 1 else 0.0 for m in self.months_paid]
-    
     @cached_property
     def annual_dividend(self):
         payment_frequency = sum(self.months_paid)
@@ -208,7 +256,7 @@ class Asset(AssetData):
                 {**self.COLUMNS['ticker'], 'label': 'Name'},
                 {'id': 'currency', 'label': 'Currency', 'type': 'text'},
                 {**self.COLUMNS['shares'], 'label': 'Amount'},
-                {**self.COLUMNS['market_value'], 'label': 'Amount (€)'},
+                {**self.COLUMNS['market_value_eur'], 'label': 'Amount (€)'},
                 {**self.COLUMNS['weight']},
                 {'id': 'iyield', 'label': 'Interest rate', 'type': 'monitor_input', 'suffix': '%'},
                 {'id': 'compounding', 'label': 'Compounding rate', 'type': 'select_input',
@@ -216,7 +264,7 @@ class Asset(AssetData):
             ]
 
         schema = [self.COLUMNS[c] for c in
-                  ('ticker', 'shares', 'price', 'price_eur', 'market_value', 'quote', 'quote_eur', 'weight')]
+                  ('ticker', 'shares', 'price', 'price_eur', 'market_value_eur', 'quote', 'quote_eur', 'weight')]
 
         # Category-specific columns
         if self.asset_type == 'stocks':
@@ -260,6 +308,7 @@ class Asset(AssetData):
         # Properties
         data.update({
             'market_value': self.market_value,
+            'market_value_eur': self.market_value_eur,
             'price_eur': self.price_eur,
             'cost_basis': self.cost_basis,
             'annual_dividend': self.annual_dividend,
@@ -318,7 +367,7 @@ class Portfolio:
             counts = counts,
             details = final_details
         )
-        
+
     @property
     def annual_dividends(self):
         return sum(self.monthly_income_data.payouts)
@@ -326,8 +375,8 @@ class Portfolio:
     @property
     def portfolio_yield_data(self):
         total_mv = self.total_market_value
-        total_income = sum(asset.market_value * asset.div_yield for asset in self.assets)
-        total_income_growth = sum(asset.market_value * asset.div_yield * asset.div_growth for asset in self.assets)
+        total_income = sum(asset.market_value_eur * asset.div_yield for asset in self.assets)
+        total_income_growth = sum(asset.market_value_eur * asset.div_yield * asset.div_growth for asset in self.assets)
         
         if total_mv < 0 or total_income <= 0:
             return SimpleNamespace(
@@ -343,14 +392,14 @@ class Portfolio:
     @property
     def portfolio_syield(self):
         total_mv = self.total_market_value
-        total_income = sum(asset.market_value * asset.syield for asset in self.assets)
+        total_income = sum(asset.market_value_eur * asset.syield for asset in self.assets)
         if total_mv > 0:
             return float(total_income / total_mv)
 
     @property
     def portfolio_iyield(self):
         total_mv = self.total_market_value
-        total_income = sum(asset.market_value * asset.iyield for asset in self.assets)
+        total_income = sum(asset.market_value_eur * asset.iyield for asset in self.assets)
         if total_mv > 0:
             return float(total_income / total_mv)
  
@@ -405,7 +454,7 @@ class Portfolio:
             footer_map = {
                 'ticker': {'label': 'Total Stocks', 'class': 'font-bold'},
                 'price_eur': {'val': self.total_cost_basis, 'id': 'total-cost-basis-stocks', 'type': 'finance'},
-                'market_value': {'val': self.total_market_value, 'id': 'total-market-value-stocks', 'type': 'finance'},
+                'market_value_eur': {'val': self.total_market_value, 'id': 'total-market-value-stocks', 'type': 'finance', 'suffix':'€'},
                 'div_yield': {'val': configs['div_yield']['val'], 'id': 'portfolio-div-yield', 'type': 'monitor', 'suffix': '%',
                                     'bg_class': configs['div_yield']['class']},
                 'div_growth': {'val': configs['div_growth']['val'], 'id': 'portfolio-div-growth', 'type': 'monitor', 'suffix': '%',
@@ -417,13 +466,13 @@ class Portfolio:
             footer_map = {
                 'ticker': {'label': 'Total Crypto', 'class': 'font-bold'},
                 'price_eur': {'val': self.total_cost_basis, 'id': 'total-cost-basis-crypto', 'type': 'finance', 'suffix':'€'},
-                'market_value': {'val': self.total_market_value, 'id': 'total-market-value-crypto', 'type': 'finance', 'suffix':'€'},
+                'market_value_eur': {'val': self.total_market_value, 'id': 'total-market-value-crypto', 'type': 'finance', 'suffix':'€'},
                 'syield':{'val': self.portfolio_syield, 'id': 'portfolio_syield', 'type': 'monitor', 'suffix': '%', 'bg_class': configs['syield']['class']},
             }
         elif asset_type == 'interest':
             footer_map = {
                 'currency': {'label': 'Total Interest', 'class': 'font-bold'},
-                'market_value': {'val': self.total_market_value, 'id': 'total_market_value-interest', 'type': 'finance', 'suffix':'€'},
+                'market_value_eur': {'val': self.total_market_value, 'id': 'total_market_value-interest', 'type': 'finance', 'suffix':'€'},
                 'iyield':{'val': self.portfolio_iyield, 'id': 'portfolio_iyield', 'type': 'monitor', 'suffix': '%', 'bg_class': configs['iyield']['class']},
             }
 
@@ -485,9 +534,9 @@ class Portfolio:
 # Load external data into a portfolio
 class PortfolioLoader:
     @staticmethod
-    def load_asset_data(asset_type):
+    def load_asset_data(asset_type, portfolio_store: PortfolioDataManager):
         manager = AssetDataManager(asset_type)
-        portfolio_mgr = PortfolioDataManager()
+        #portfolio_mgr = PortfolioDataManager()
         
         asset_data = {
             'shares': manager.get_data('shares'),
@@ -498,7 +547,7 @@ class PortfolioLoader:
             'cont':   manager.get_data('cont'),
             'syield': manager.get_data('syield'),
             'iyield': manager.get_data('iyield'),
-            'fx_rates': portfolio_mgr.get_forex_rates(),
+            'fx_rates': portfolio_store.get_forex_rates(),
             'currency_choice': manager.get_data('currency'),
             'compounding': manager.get_data('compounding')
         }
@@ -510,6 +559,7 @@ class PortfolioManager:
     # Asset types whose Asset objects need FinanceDataManager metrics.
     # Everything else (e.g. 'interest') just needs ticker + user inputs.
     METRIC_ASSET_TYPES = {'stocks', 'crypto'}
+    PROJECTED_INCOME_ASSET_TYPES = {'crypto', 'interest'}
 
     def __init__(self, portfolios_dict, free_cash=0.0, silent=False):
         self._portfolios = portfolios_dict
@@ -534,24 +584,37 @@ class PortfolioManager:
     def grand_total_with_cash(self):
         return self.total_market_value + self.free_cash
         
+    # @property
+    # def total_income_data(self):
+    #     grand_total = [0.0] * 12
+    #     grand_details = [[] for _ in range(12)]
+        
+    #     for portfolio in self.values():
+    #         report = portfolio.monthly_income_data
+    #         for i in range(12):
+    #             grand_total[i] += report.payouts[i]
+    #             if report.payouts[i] > 0:
+    #                 # Add a header for the asset class in the hover text
+    #                 grand_details[i].append(report.details[i])
+                    
+    #     return {
+    #         "payouts": grand_total,
+    #         "details": ["<br>".join(d) for d in grand_details]
+    #     }
+
     @property
     def total_income_data(self):
-        grand_total = [0.0] * 12
+        breakdown = {}
         grand_details = [[] for _ in range(12)]
-        
-        for portfolio in self.values():
+        for name, portfolio in self.items():
             report = portfolio.monthly_income_data
+            breakdown[name] = report.payouts          # e.g. breakdown['stocks'], ['crypto'], ['interest']
             for i in range(12):
-                grand_total[i] += report.payouts[i]
                 if report.payouts[i] > 0:
-                    # Add a header for the asset class in the hover text
                     grand_details[i].append(report.details[i])
-                    
-        return {
-            "payouts": grand_total,
-            "details": ["<br>".join(d) for d in grand_details]
-        }
-    
+        breakdown['details'] = ["<br>".join(d) for d in grand_details]
+        return breakdown
+
     def __iter__(self):
         return iter(self._portfolios)
         
@@ -599,9 +662,10 @@ class PortfolioManager:
     
     @classmethod
     @timed
-    def from_storage(cls, asset_classes, finance_managers, interval='1d', force_update=False):
+    def from_storage(cls, asset_classes, finance_managers, portfolio_store: PortfolioDataManager, interval='1d', force_update=False):
         # Build a PortfolioManager
         portfolios = {}
+        next(iter(finance_managers.values()))._ensure_fx_rates()   # ensure fx cache is fresh before building any asset
         
         for asset_type in asset_classes:
             dm = AssetDataManager(asset_type)
@@ -614,7 +678,7 @@ class PortfolioManager:
                 raw_metrics = [{'Ticker': t, 'Value': 0} for t in tickers]
 
             # Load user-specific data
-            data = PortfolioLoader.load_asset_data(asset_type)
+            data = PortfolioLoader.load_asset_data(asset_type, portfolio_store)
             
             # Create Asset objects
             assets = [
@@ -638,16 +702,17 @@ class PortfolioManager:
             
             portfolios[asset_type] = Portfolio(assets)
             
-        free_cash = PortfolioDataManager().get_cash()
+        free_cash = portfolio_store.get_cash()
         return cls(portfolios, free_cash=free_cash)
     
     @classmethod
-    def from_cache(cls, asset_classes, finance_managers):
+    def from_cache(cls, asset_classes, finance_managers, portfolio_store: PortfolioDataManager):
         """
         Rebuild portfolio from already-cached metrics. 
         No network calls, no staleness checks.
         """
         portfolios = {}
+        next(iter(finance_managers.values()))._ensure_fx_rates()   # ensure fx cache is fresh before building any asset
 
         # Initialise portfolios with all asset types, even if empty
         for asset_type in asset_classes:
@@ -674,7 +739,7 @@ class PortfolioManager:
                     raw_metrics = [{'Ticker': t, 'Value': 0} for t in tickers]
                     valid_tickers = tickers
                 
-                data = PortfolioLoader.load_asset_data(asset_type)
+                data = PortfolioLoader.load_asset_data(asset_type, portfolio_store)
                 assets = [
                     Asset(
                         ticker=t,
@@ -698,7 +763,7 @@ class PortfolioManager:
                 logger.error(f"Error processing asset type '{asset_type}': {e}")
                 portfolios[asset_type] = Portfolio([])  # Ensure empty Portfolio is set
 
-        free_cash = PortfolioDataManager().get_cash()
+        free_cash = portfolio_store.get_cash()
         return cls(portfolios, free_cash=free_cash)
 
 

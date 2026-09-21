@@ -109,6 +109,16 @@ class PortfolioDataManager(JSONPersistenceManager):
     def get_forex_rates(self):
         data = self.load('last_fetch_date.json')
         return {k: v for k, v in data.items() if k.endswith('_rate')}
+
+    def get_fx_cache(self):
+        return self.load('last_fetch_date.json', default={
+            "last_call_fx": "1900-01-01",
+            "usd_eur_rate": 1.0,
+            "chf_eur_rate": 1.0,
+        })
+
+    def save_fx_cache(self, data):
+        self.save('last_fetch_date.json', data)
     
 class AlertNotificationManager(JSONPersistenceManager):
     """Handles global/cross-asset persistent historical alerts using atomic JSON writes."""

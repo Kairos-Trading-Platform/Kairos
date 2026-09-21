@@ -11,15 +11,22 @@ import logging
 logger = logging.getLogger(__name__)
 
 @njit(cache=True)
-def _compound_daily_income(principal: float, annual_rate: float,
-                            periods_per_year: int, n_days: int) -> np.ndarray:
-    """Numba-jitted daily compounding: income earned on each of n_days days."""
-    daily_rate = (1.0 + annual_rate / periods_per_year) ** (periods_per_year / 365.0) - 1.0
-    income = np.empty(n_days)
+def _compound_periodic_income(principal: float, annual_rate: float,
+                               periods_per_year: int, n_days: int) -> np.ndarray:
+    """Income credited only at each compounding period's boundary day.
+    periods_per_year=365 -> daily jumps; =12 -> monthly jumps; etc."""
+    period_rate = annual_rate / periods_per_year
+    period_length_days = 365.0 / periods_per_year
+    income = np.zeros(n_days)
     balance = principal
-    for i in range(n_days):
-        earned = balance * daily_rate
-        income[i] = earned
+    elapsed = 0.0
+    while True:
+        elapsed += period_length_days
+        day_idx = int(elapsed) - 1
+        if day_idx >= n_days:
+            break
+        earned = balance * period_rate
+        income[day_idx] += earned
         balance += earned
     return income
 
@@ -196,10 +203,10 @@ class Asset(AssetData):
 
         today = date.today()
         n_days = (_projection_horizon_end(today) - today).days + 1
-        daily_income = _compound_daily_income(
+        period_income = _compound_periodic_income(
             principal, self.annual_yield, self.compounding_periods_per_year, n_days
         )
-        for offset, amount in enumerate(daily_income):
+        for offset, amount in enumerate(period_income):
             m = (today + timedelta(days=offset)).month - 1
             monthly[m] += amount
         return monthly  

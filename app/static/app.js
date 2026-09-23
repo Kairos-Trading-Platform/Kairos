@@ -161,6 +161,10 @@ class PortfolioController extends FinAppBase {
     }
 
     setupGlobalListeners() {
+        document.addEventListener('DOMContentLoaded', () => {
+            new ResearchController({ selectedTicker: "{{ selected_ticker | default('', true) }}" });
+            new ComponentSweepUI();
+        });
         // Event delegation for all portfolio inputs
         document.addEventListener('change', (e) => {
             if (e.target.matches('input[id*="_"],select[id*="_"]')) {
@@ -1061,6 +1065,62 @@ class TickerManager {
 //     }
 // }
 
+class StrategyManager {
+    constructor(app) {
+        this.app = app;
+        this.dom = {
+            controls: document.getElementById('strategy-controls'),
+            select: document.getElementById('strategy-select'),
+            params: document.getElementById('strategy-params'),
+            runBtn: document.getElementById('run-strategy-btn'),
+        };
+        this.currentSchema = [];
+    }
+
+    async init() {
+        if (!this.dom.select) return;
+        const strategies = await this.app.apiRequest('/strategies');
+        this.dom.select.innerHTML = strategies
+            .map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+        this.dom.select.addEventListener('change', () => this.loadSchema());
+        this.dom.runBtn.addEventListener('click', () => this.run());
+        await this.loadSchema();
+    }
+
+    async loadSchema() {
+        const key = this.dom.select.value;
+        this.currentSchema = await this.app.apiRequest(`/strategies/${key}/schema`);
+        this.dom.params.innerHTML = this.currentSchema.map(p => `
+            <div class="form-group">
+                <label>${p.label}</label>
+                <input id="param_${p.key}" value="${Array.isArray(p.default) ? p.default.join(',') : p.default}">
+            </div>`).join('');
+    }
+
+    collectParams() {
+        const out = {};
+        this.currentSchema.forEach(p => {
+            const raw = document.getElementById(`param_${p.key}`).value;
+            out[p.key] = p.type === 'multi_ticker' ? raw.split(',').map(s => s.trim()) : raw;
+        });
+        return out;
+    }
+
+    async run() {
+        const key = this.dom.select.value;
+        const data = await this.app.apiRequest(`/strategies/${key}/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.collectParams())
+        });
+        this.app.renderPlot('portfolio-plot-container', data.fig_data);
+    }
+
+    toggle(show) {
+        this.dom.controls.style.display = show ? 'block' : 'none';
+    }
+}
+
 class ResearchController extends FinAppBase {
     constructor(config) {
         super();
@@ -1092,6 +1152,8 @@ class ResearchController extends FinAppBase {
         this.updateView();
         this.updatePortfolioView();
         this.refreshSidebarUI();
+        this.strategyManager = new StrategyManager(this);
+        this.strategyManager.init();
 
         // Reflow plots when container resizes
         if (this.dom.tickerContainer) {
@@ -1274,7 +1336,9 @@ class ResearchController extends FinAppBase {
                 this.dom.portfolioTabs.forEach(t => t.classList.remove('portfolio-active-tab'));
                 e.target.classList.add('portfolio-active-tab');
                 this.state.portfolioMode = e.target.dataset.mode;
-                this.updatePortfolioView();
+
+                this.strategyManager.toggle(this.state.portfolioMode === 'strategies');
+                if (this.state.portfolioMode !== 'strategies') this.updatePortfolioView();
             });
         });
 
@@ -1316,5 +1380,45 @@ class ResearchController extends FinAppBase {
         if (this.dom.expandBtn) {
             this.dom.expandBtn.addEventListener('click', () => this.handleExpandHistory());
         }
+    }
+}
+
+
+class ComponentSweepUI {
+    constructor() {
+        this.select = document.getElementById('component-select');
+        this.paramsDiv = document.getElementById('component-params');
+        this.init();
+    }
+    async init() {
+        const components = await fetch('/research/components').then(r => r.json());
+        components.forEach(c => this.select.add(new Option(c.label, c.key)));
+        this.select.addEventListener('change', () => this.onSelect());
+        document.getElementById('run-sweep-btn').addEventListener('click', () => this.runSweep());
+    }
+    async onSelect() {
+        const key = this.select.value;
+        if (!key) { this.paramsDiv.style.display = 'none'; return; }
+        const schema = await fetch(`/research/components?component=${key}`).then(r => r.json());
+        this.paramsDiv.innerHTML = schema.map(p => `
+            <label>${p.key} (default: ${p.default})
+                <input type="text" data-field="${p.key}" placeholder="comma-separated test values">
+            </label>`).join('');
+        this.paramsDiv.style.display = 'block';
+    }
+    async runSweep() {
+        const mode = document.querySelector('input[name="sweep-mode"]:checked').value;
+        const param_values = {};
+        this.paramsDiv.querySelectorAll('input[data-field]').forEach(inp => {
+            if (inp.value.trim()) {
+                param_values[inp.dataset.field] = inp.value.split(',').map(v => v.trim());
+            }
+        });
+        const body = { dep_col: window.currentDep, indep_cols: window.currentIndep, param_values, mode };
+        const data = await fetch('/research/components/sweep', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        }).then(r => r.json());
+        // render data.results as a table
     }
 }

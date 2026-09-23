@@ -8,6 +8,10 @@ import os
 import pickle
 import pandas as pd
 from flask.views import MethodView
+from statsmodels.tools import add_constant
+from app.analytics.component_registry import ComponentRegistry
+from app.analytics.param_sweep import ParamSweepRunner
+from app.strategies.cointegration_kalman_class import Config, DataHandler, CointegrationModel, KalmanMLE
 import logging
 logger = logging.getLogger(__name__)
 
@@ -51,12 +55,14 @@ class PortfolioView(MethodView):
     @timed
     def _rebuild_analyser(self, stocks_data: pd.DataFrame) -> None:
         finance_managers = current_app.config['FINANCE_MANAGERS']
+        portfolio_store = current_app.config['PORTFOLIO_STORE']
         news_manager = current_app.config['NEWS_MANAGER']
         app_config = current_app.config['APP_CONFIG']
 
         portfolio = PortfolioManager.from_cache(
             asset_classes=['stocks'],
             finance_managers=finance_managers,
+            portfolio_store=portfolio_store
         )
         analyser = PortfolioAnalyser(
             portfolio.stocks,
@@ -258,3 +264,33 @@ def expand_history():
     except Exception as e:
         current_app.logger.error(f"Expand error: {e}")
         return jsonify({"message": "Failed to expand history."}), 500
+
+
+@bp.route('/research/components')
+def components_schema():
+    key = request.args.get('component')
+    return jsonify(ComponentRegistry.schema(key) if key else ComponentRegistry.list())
+
+@bp.route('/research/components/sweep', methods=['POST'])
+@timed
+def run_component_sweep():
+    payload = request.get_json()
+    dep, indep = payload.get('dep_col'), payload.get('indep_cols', [])
+    param_values, mode = payload.get('param_values'), payload.get('mode', 'single')
+    entry_z = payload.get('entry_z', 1.0)
+    if not (dep and indep and param_values):
+        return jsonify({"error": "dep_col, indep_cols, param_values required"}), 400
+
+    stocks_data = current_app.extensions["research_dm"].get_data(asset_type='stocks')
+    base_cfg = Config(dep_col=dep, indep_cols=indep)
+    data = DataHandler(cfg=base_cfg, df=stocks_data[[dep, *indep]], log=base_cfg.log_prices)
+
+    res = CointegrationModel(cfg=base_cfg).fit(data.df.tail(base_cfg.bt_window))
+    mle = KalmanMLE(init_beta=res["VECM_beta"][1:], init_alpha=res["VECM_alpha"], cfg=base_cfg)
+    w_beta, w_alpha, v = mle.fit(data.df[dep].values,
+                                  add_constant(data.df[indep], prepend=False).values)
+
+    runner = ParamSweepRunner(data, base_cfg, res["VECM_beta"][1:], res["VECM_alpha"], w_beta, w_alpha, v)
+    df = (runner.sweep_grid(param_values, entry_z) if mode == 'grid'
+          else runner.sweep_single(*next(iter(param_values.items())), entry_z=entry_z))
+    return jsonify({"results": df.to_dict(orient='records')})

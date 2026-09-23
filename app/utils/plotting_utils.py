@@ -817,6 +817,17 @@ def create_returns_distribution_chart(returns, student_t_params=None):
     
     return fig
 
+def create_equity_curve_chart(equity_curve: pd.Series, title="Strategy equity curve") -> go.Figure:
+    fig = go.Figure(go.Scatter(
+        x=equity_curve.index.astype(str).tolist(),
+        y=equity_curve.values.tolist(),
+        mode='lines',
+        name='Equity',
+        hovertemplate='%{y:.2%}<extra></extra>'
+    ))
+    fig.update_layout(**_base_layout(title=title, yaxis_title='Cumulative return'))
+    return fig
+
 if __name__ == '__main__':
 
     simulated_stock_metrics = [

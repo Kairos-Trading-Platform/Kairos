@@ -1,0 +1,1 @@
+from app.analytics import cointegration_kalman_registry, vix_regime_registry  # noqa: F401

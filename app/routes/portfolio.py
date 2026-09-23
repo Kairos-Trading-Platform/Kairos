@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, session, jsonify, current_app
 from app.utils import plotting_utils
-from app.utils.storage_utils import AssetDataManager, PortfolioDataManager
+from app.utils.storage_utils import AssetDataManager
 from app.models import PortfolioManager
 from app.utils.time_debug import timed
 from app.routes.api import _build_assets_payload
@@ -132,9 +132,6 @@ def save_single_value(asset_type):
 def save_cash():
     data = request.get_json()
     cash_value = data.get('cash', 0)
-    
-    #storage_utils.save_cash(cash_value)
-    #PortfolioDataManager().save_cash(cash_value)
     current_app.config['PORTFOLIO_STORE'].save_cash(cash_value)
 
     # Store in session so it persists for the user

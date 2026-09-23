@@ -17,6 +17,18 @@
             <div class="portfolio-tab portfolio-active-tab" data-mode="returns">Returns</div>
             <div class="portfolio-tab" data-mode="heatmap">Correlation</div>
             <div class="portfolio-tab" data-mode="efficient_frontier">Efficient frontier</div>
+            <div class="portfolio-tab" data-mode="strategies">Strategies</div>
+            <div id="strategy-controls" style="display:none; padding:10px;">
+                <select id="strategy-select"></select>
+                <div id="strategy-params"></div>
+                    <select id="component-select"><option value="">Choose a class…</option></select>
+                    <div id="component-params" style="display:none;"></div>
+                    <label><input type="radio" name="sweep-mode" value="single" checked> One by one</label>
+                    <label><input type="radio" name="sweep-mode" value="grid"> Batch (grid)</label>
+                    <button id="run-sweep-btn">Run</button>
+                    <div id="sweep-results"></div>
+                <button id="run-strategy-btn">Run</button>
+            </div>
         </div>
         
         <div id="tab-actions" style="padding-top: 10px;">

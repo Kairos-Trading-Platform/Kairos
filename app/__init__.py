@@ -66,10 +66,11 @@ def create_app():
         config=app_config
     )
 
-    from .routes import cashflow, portfolio, research, api
+    from .routes import cashflow, portfolio, research, strategies, api
     app.register_blueprint(cashflow.bp)
     app.register_blueprint(portfolio.bp)
     app.register_blueprint(research.bp)
+    app.register_blueprint(strategies.bp)
     app.register_blueprint(api.bp)
     
     # Initialise a database    

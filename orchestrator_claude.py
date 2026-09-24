@@ -60,6 +60,12 @@ class ClaudeAgent(ABC):
         )
         return "".join(b.text for b in msg.content if b.type == "text")
 
+    @staticmethod
+    def _strip_markdown_fences(text: str) -> str:
+        """Removes a leading/trailing ``` or ```lang fence, if present."""
+        text = re.sub(r"^```(?:\w+)?\n", "", text.strip())
+        text = re.sub(r"\n?```$", "", text)
+        return text.strip()
 
 # --------------------------------------------------------------------------- #
 # Specialised Sub-Agents
@@ -83,19 +89,19 @@ class CoderSubAgent(ClaudeAgent):
             f"Feedback / Test Results / Security Audit to address:\n{feedback}"
         )
         raw_response = self.respond(self.SYSTEM_PROMPT, user_content)
+        print(f"[Coder Raw Response]\n{raw_response!r}\n", flush=True)
         return self._clean_diff(raw_response)
 
     def _clean_diff(self, text: str) -> str:
         """Strips markdown code blocks and trailing prose from LLM response."""
         # Strip markdown fences if present
-        text = re.sub(r"^```(?:diff)?\n", "", text, flags=re.MULTILINE)
-        text = re.sub(r"^```\n?", "", text, flags=re.MULTILINE)
-        
+        text = self._strip_markdown_fences(text)
+
         # Extract only from the first unified diff header ('--- ' or 'diff --git')
         diff_match = re.search(r"^(?:--- |diff --git ).*", text, re.DOTALL | re.MULTILINE)
         if diff_match:
             return diff_match.group(0).strip()
-        
+
         return text.strip()
 
 
@@ -118,8 +124,9 @@ class SecuritySubAgent(ClaudeAgent):
             return {"status": "PASS", "findings": ["No code changes to audit."]}
         
         raw = self.respond(self.SYSTEM_PROMPT, f"Proposed Diff:\n{diff}")
+        print(f"[Security Raw Response]\n{raw!r}\n", flush=True)
         try:
-            return json.loads(raw)
+            return json.loads(self._strip_markdown_fences(raw))
         except json.JSONDecodeError:
             return {
                 "status": "FAIL",
@@ -153,7 +160,7 @@ class TesterSubAgent:
         """Runs pytest on the local workspace and captures stderr/stdout output."""
         try:
             result = subprocess.run(
-                ["pytest", "-v"],
+                ["testenv", "-v"],
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
@@ -206,6 +213,8 @@ class GitManager:
     def apply_patch(self, diff_text: str) -> None:
         if not diff_text.strip():
             return
+        if not diff_text.endswith("\n"):
+            diff_text += "\n"
         patch_path = self.repo_path / ".orchestrator_patch.diff"
         patch_path.write_text(diff_text, encoding="utf-8")
         try:
@@ -327,6 +336,8 @@ class ClaudeOrchestrationSession:
                 sec_report = self.security.audit(diff)
                 self.cache.set(sec_key, sec_report)
 
+            print(f"[Security Result] {sec_report}", flush=True)
+
             if sec_report.get("status") == "FAIL":
                 findings = "\n".join(sec_report.get("findings", []))
                 feedback = f"SECURITY AUDIT FAILED:\n{findings}"
@@ -341,6 +352,7 @@ class ClaudeOrchestrationSession:
             print(f"[Tester Result] Passed: {test_passed}", flush=True)
 
             if not test_passed:
+                print(f"[Tester Output]\n{test_output}\n", flush=True)
                 self.git.revert_uncommitted()
                 feedback = f"UNIT TESTS FAILED:\n{test_output}"
                 self.log.append(RoundLog(round_num, diff, "PASS", False, feedback))

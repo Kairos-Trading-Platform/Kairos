@@ -208,7 +208,7 @@ class GitManager:
         if branches:
             self._run("checkout", branch_name)
         else:
-            self._run("checkout", "-b", branch_name)
+            self._run("checkout", "-b", branch_name, "HEAD")
 
     def apply_patch(self, diff_text: str) -> None:
         if not diff_text.strip():
@@ -235,7 +235,7 @@ class GitManager:
     def push(self, branch_name: str) -> None:
         if branch_name in self._protected:
             raise RuntimeError("Refusing to push directly to a protected branch.")
-        self._run("push", "-u", "origin", branch_name)
+        self._run("push", "-u", "--force-with-lease", "origin", branch_name)
 
 # --------------------------------------------------------------------------- #
 # Branch Caching Engine

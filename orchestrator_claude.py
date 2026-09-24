@@ -51,7 +51,7 @@ class ClaudeAgent(ABC):
         self.model = model
         self._client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-    def respond(self, system: str, user: str, max_tokens: int = 100) -> str:
+    def respond(self, system: str, user: str, max_tokens: int = 500) -> str:
         msg = self._client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
@@ -160,7 +160,7 @@ class TesterSubAgent:
         """Runs pytest on the local workspace and captures stderr/stdout output."""
         try:
             result = subprocess.run(
-                ["testenv", "-v"],
+                [sys.executable, "-m", "pytest", "-v"],  # Uses current active Python env
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,

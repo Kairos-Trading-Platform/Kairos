@@ -19,15 +19,34 @@
             <div class="portfolio-tab" data-mode="efficient_frontier">Efficient frontier</div>
             <div class="portfolio-tab" data-mode="strategies">Strategies</div>
             <div id="strategy-controls" style="display:none; padding:10px;">
+                <div id="strategy-warning-box" style="display: none;"></div>
+                
                 <select id="strategy-select"></select>
                 <div id="strategy-params"></div>
+                <button id="run-strategy-btn">Run</button>
                     <select id="component-select"><option value="">Choose a class…</option></select>
                     <div id="component-params" style="display:none;"></div>
                     <label><input type="radio" name="sweep-mode" value="single" checked> One by one</label>
                     <label><input type="radio" name="sweep-mode" value="grid"> Batch (grid)</label>
                     <button id="run-sweep-btn">Run</button>
                     <div id="sweep-results"></div>
-                <button id="run-strategy-btn">Run</button>
+                
+                <div id="external-data-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                    <details>
+                        <summary style="cursor: pointer; color: #007BFF; font-size: 0.9em;">Advanced: External Data Sources</summary>
+                        <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                            <p style="font-size: 0.85em; color: #666; margin-bottom: 8px;">
+                                Missing tickers? You can:
+                            </p>
+                            <ul style="font-size: 0.85em; color: #555; padding-left: 20px;">
+                                <li>Use portfolio tickers (auto-suggests available assets)</li>
+                                <li>Backfill history for specific tickers (use "Expand" button above)</li>
+                                <li>Add new tickers to portfolio via Portfolio tab</li>
+                                <li>Coming soon: Import external CSV/API data</li>
+                            </ul>
+                        </div>
+                    </details>
+                </div>
             </div>
         </div>
         
@@ -117,12 +136,12 @@
         </table>
     </div>
     
-    <script>
+    <!-- <script>
         document.addEventListener('DOMContentLoaded', () => {
             console.log("Initialising Research App...");
             new ResearchController({ selectedTicker: "{{ selected_ticker | default('', true) }}" });
         });
-    </script>
+    </script> -->
     {% endblock %}
 </body>
 

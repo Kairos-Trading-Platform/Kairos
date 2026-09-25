@@ -33,4 +33,18 @@ class ResearchDataManager:
         interval = self.config.get("research_interval")
         finance = self.finance_managers[asset_type]
         finance._ensure_prices(tickers, interval, force=False)
-        return finance._hist_prices.get(interval, pd.DataFrame())
+        
+        df = finance._hist_prices.get(interval)
+        if df is None:
+            raise RuntimeError(
+                f"No data available for interval '{interval}'. "
+                f"Available intervals: {list(finance._hist_prices.keys())}. "
+                f"Ensure config['research_interval'] matches one of these."
+            )
+        
+        # Verify tickers are columns, not index
+        if set(tickers).issubset(df.index):
+            df = df.T  # Transpose if tickers are row labels
+            df = df.loc[tickers]  # Reorder to match tickers
+        
+        return df

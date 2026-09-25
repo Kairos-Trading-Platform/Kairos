@@ -41,7 +41,7 @@ from context_builder import ContextBuilder, CodingStandards, RepoContextSelector
 import anthropic
 
 # --------------------------------------------------------------------------- #
-# Base Agent Setup (Anthropic Claude 3.5 / 3.7)
+# Base Agent Setup
 # --------------------------------------------------------------------------- #
 
 class ClaudeAgent(ABC):

@@ -1,4 +1,4 @@
-import { NotificationManager } from '../notifications/notifications_manager.js';
+import { NotificationManager } from '/static/js/notifications/notification_manager.js';
 
 export class FinAppBase {
     constructor() {
@@ -64,10 +64,22 @@ export class FinAppBase {
         if (this.loader) this.loader.classList.remove('hidden');
         try {
             const response = await fetch(url, options);
-            if (!response.ok) throw new Error(`Server Error: ${response.status}`);
+            if (!response.ok) {
+            const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
             return await response.json();
         } catch (err) {
-            console.error(`API Error: ${err}`);
+            console.error(`API Error (${url}):`, err);
+            // Show user-friendly error
+            if (this.app?.dom?.plotMessage) {
+                this.app.dom.plotMessage.style.color = 'red';
+                this.app.dom.plotMessage.innerText = `API Error: ${err.message}`;
+                this.app.dom.plotMessage.style.display = 'block';
+            } else if (!url.includes('/background_check')) {
+                // Don't alert on background sync failures
+                alert(`Request failed: ${err.message}`);
+            }
             throw err;
         } finally {
             if (this.loader) this.loader.classList.add('hidden');

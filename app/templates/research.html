@@ -136,12 +136,16 @@
         </table>
     </div>
     
-    <!-- <script>
+    <script type="module">
+        import { ResearchController } from '{{ url_for("static", filename="js/research/research_controller.js") }}';
+        import { ComponentSweepUI } from '{{ url_for("static", filename="js/research/component_sweep_ui.js") }}';
+
         document.addEventListener('DOMContentLoaded', () => {
-            console.log("Initialising Research App...");
-            new ResearchController({ selectedTicker: "{{ selected_ticker | default('', true) }}" });
+            console.log("Initialising research app...");
+            window.activeApp = new ResearchController({ selectedTicker: "{{ selected_ticker | default('', true) }}" });
+            new ComponentSweepUI();
         });
-    </script> -->
+    </script>
     {% endblock %}
 </body>
 

@@ -1,4 +1,5 @@
-import { StrategyManager } from './research/strategy_manager.js'
+import { StrategyManager } from '/static/js/research/strategy_manager.js'
+import { FinAppBase } from '/static/js/core/base.js';
 
 export class ResearchController extends FinAppBase {
     constructor(config) {

@@ -2,31 +2,78 @@
 ├── app
 │   ├── analytics
 │   │   ├── analyser.py
+│   │   ├── cointegration_kalman_registry.py
+│   │   ├── component_registry.py
 │   │   ├── optimiser.py
-│   │   └── __pycache__
-│   │       ├── analyser.cpython-312.pyc
-│   │       └── optimiser.cpython-312.pyc
+│   │   ├── param_sweep.py
+│   │   ├── __pycache__
+│   │   │   ├── analyser.cpython-312.pyc
+│   │   │   ├── cointegration_kalman_registry.cpython-312.pyc
+│   │   │   ├── component_registry.cpython-312.pyc
+│   │   │   ├── optimiser.cpython-312.pyc
+│   │   │   ├── param_sweep.cpython-312.pyc
+│   │   │   └── vix_regime_registry.cpython-312.pyc
+│   │   └── vix_regime_registry.py
 │   ├── __init__.py
 │   ├── models.py
 │   ├── __pycache__
 │   │   ├── __init__.cpython-312.pyc
+│   │   ├── models._compound_daily_income-13.py312.1.nbc
+│   │   ├── models._compound_daily_income-13.py312.nbi
+│   │   ├── models._compound_daily_income-825.py312.1.nbc
+│   │   ├── models._compound_daily_income-825.py312.nbi
+│   │   ├── models._compound_periodic_income-13.py312.1.nbc
+│   │   ├── models._compound_periodic_income-13.py312.nbi
 │   │   └── models.cpython-312.pyc
 │   ├── routes
+│   │   ├── api.py
 │   │   ├── cashflow.py
 │   │   ├── portfolio.py
 │   │   ├── __pycache__
+│   │   │   ├── api.cpython-312.pyc
 │   │   │   ├── cashflow.cpython-312.pyc
 │   │   │   ├── portfolio.cpython-312.pyc
 │   │   │   ├── research.cpython-312.pyc
+│   │   │   ├── strategies.cpython-312.pyc
 │   │   │   └── test.cpython-312.pyc
-│   │   └── research.py
+│   │   ├── research.py
+│   │   └── strategies.py
 │   ├── services
 │   │   ├── data_fetching.py
 │   │   └── __pycache__
 │   │       └── data_fetching.cpython-312.pyc
 │   ├── static
-│   │   ├── app.js
+│   │   ├── js
+│   │   │   ├── app.js
+│   │   │   ├── core
+│   │   │   │   └── base.js
+│   │   │   ├── notifications
+│   │   │   │   └── notification_manager.js
+│   │   │   ├── portfolio
+│   │   │   │   ├── chart_manager.js
+│   │   │   │   ├── portfolio_controller.js
+│   │   │   │   ├── portfolio_ui_manager.js
+│   │   │   │   └── ticker_manager.js
+│   │   │   └── research
+│   │   │       ├── component_sweep_ui.js
+│   │   │       ├── research_controller.js
+│   │   │       └── strategy_manager.js
+│   │   ├── main.js
 │   │   └── style.css
+│   ├── strategies
+│   │   ├── base.py
+│   │   ├── cointegration_kalman_class.py
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   │   ├── base.cpython-312.pyc
+│   │   │   ├── cointegration_kalman_class.cpython-312.pyc
+│   │   │   ├── cointegration_kalman_registry.cpython-312.pyc
+│   │   │   ├── component_registry.cpython-312.pyc
+│   │   │   ├── __init__.cpython-312.pyc
+│   │   │   ├── param_sweep.cpython-312.pyc
+│   │   │   ├── vix_regime_modeling.cpython-312.pyc
+│   │   │   └── vix_regime_registry.cpython-312.pyc
+│   │   └── vix_regime_modeling.py
 │   ├── templates
 │   │   ├── base.html
 │   │   ├── cashflow.html
@@ -34,7 +81,8 @@
 │   │   ├── portfolio.html
 │   │   └── research.html
 │   ├── tests
-│   │   └── test_finance_data.py
+│   │   └── __pycache__
+│   │       └── test_finance_data.cpython-312-pytest-8.4.1.pyc
 │   └── utils
 │       ├── config.py
 │       ├── database.py
@@ -58,9 +106,13 @@
 │       │   └── stocks_price_history_1h.csv
 │       └── time_debug.py
 ├── app.py
+├── CHANGELOG_ORCHESTRATOR.md
 ├── config.py
+├── context_builder.py
 ├── current_tree.txt
 ├── data
+│   ├── AED.BR_news.json
+│   ├── alerts.json
 │   ├── AMAT_news.json
 │   ├── AMT_news.json
 │   ├── AMUN.PA_news.json
@@ -79,6 +131,9 @@
 │   ├── frontier_cache.pkl
 │   ├── global_cash.json
 │   ├── INFQ_news.json
+│   ├── interest_data.json
+│   ├── interest_metrics_static.json
+│   ├── interest_price_history_15m.csv
 │   ├── IONQ_news.json
 │   ├── ISP.MI_news.json
 │   ├── last_fetch_date.json
@@ -101,20 +156,50 @@
 │   ├── stocks_metrics_static.json
 │   ├── stocks_price_history_15m.csv
 │   ├── stocks_price_history_1d.csv
+│   ├── tmp05rf1hpa.tmp
+│   ├── tmp0aht4bra.tmp
+│   ├── tmp23mzdec5.tmp
+│   ├── tmp2ammy_yz.tmp
+│   ├── tmp2jtln8y0.tmp
+│   ├── tmp9eeuunmq.tmp
+│   ├── tmpc7u6oewi.tmp
+│   ├── tmpca_1__gk.tmp
+│   ├── tmpf95fuyq4.tmp
+│   ├── tmp_ijgkpcs.tmp
+│   ├── tmpm50p33d5.tmp
+│   ├── tmpm7lebqgf.tmp
+│   ├── tmpmoj74y5g.tmp
+│   ├── tmpmqqyjgcj.tmp
+│   ├── tmp_plw3b6h.tmp
+│   ├── tmpr7_0nxdw.tmp
+│   ├── tmpt3ukxiem.tmp
+│   ├── tmpvsio8_6o.tmp
+│   ├── tmpw79ndtjf.tmp
+│   ├── tmpwdvplp4n.tmp
+│   ├── tmpy_pcguwf.tmp
 │   ├── TRN.MI_news.json
 │   ├── TT_news.json
 │   └── user_config.json
 ├── instance
 │   └── finance_app.db
 ├── LICENSE
+├── orchestrator_claude.py
+├── orchestrator_multi.py
+├── output
+│   └── AMAT_vs_LRCX
 ├── __pycache__
 │   ├── app.cpython-312.pyc
 │   ├── config.cpython-312.pyc
+│   ├── context_builder.cpython-312.pyc
 │   ├── database.cpython-312.pyc
 │   ├── finance_data.cpython-312.pyc
+│   ├── orchestrator_claude.cpython-312.pyc
 │   ├── plotting_utils.cpython-312.pyc
-│   └── storage_utils.cpython-312.pyc
+│   ├── storage_utils.cpython-312.pyc
+│   ├── test_orchestrator.cpython-312-pytest-7.4.4.pyc
+│   └── test_orchestrator.cpython-312-pytest-8.4.1.pyc
 ├── README.md
-└── requirements.txt
+├── requirements.txt
+└── test_orchestrator.py
 
-18 directories, 100 files
+28 directories, 175 files

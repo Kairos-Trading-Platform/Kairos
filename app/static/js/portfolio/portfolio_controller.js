@@ -1,3 +1,8 @@
+import { FinAppBase } from '/static/js/core/base.js'
+import { ChartManager } from '/static/js/portfolio/chart_manager.js'
+import { PortfolioUIManager } from '/static/js/portfolio/portfolio_ui_manager.js'
+import { TickerManager } from '/static/js/portfolio/ticker_manager.js'
+
 export class PortfolioController extends FinAppBase {
     constructor(initialData, interval) {
         super();
@@ -50,10 +55,6 @@ export class PortfolioController extends FinAppBase {
     }
 
     setupGlobalListeners() {
-        document.addEventListener('DOMContentLoaded', () => {
-            new ResearchController({ selectedTicker: "{{ selected_ticker | default('', true) }}" });
-            new ComponentSweepUI();
-        });
         // Event delegation for all portfolio inputs
         document.addEventListener('change', (e) => {
             if (e.target.matches('input[id*="_"],select[id*="_"]')) {

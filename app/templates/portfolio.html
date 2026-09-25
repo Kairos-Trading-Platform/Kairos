@@ -102,16 +102,18 @@
         </div>
     {% endif %}
 
-    <script>
+    <script type="module">
         window.INITIAL_PORTFOLIO_DATA = {
             portfolio: {{ portfolio.to_dict() | tojson }}
         };
+
+        import { PortfolioController } from '{{ url_for("static", filename="js/portfolio/portfolio_controller.js") }}';
         
         // Initial event listener
         document.addEventListener('DOMContentLoaded', () => {
         
-            console.log("Initial Data loaded:", window.INITIAL_PORTFOLIO_DATA);
-            new PortfolioController(
+            console.log("Initial data loaded:", window.INITIAL_PORTFOLIO_DATA);
+            window.activeApp = new PortfolioController(
                 window.INITIAL_PORTFOLIO_DATA, 
                 window.APP_CONFIG.liveIntervalMs
             );

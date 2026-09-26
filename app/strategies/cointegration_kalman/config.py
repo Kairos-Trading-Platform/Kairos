@@ -164,6 +164,10 @@ class Config:
     coeff_file: str = field(init=False)
  
     def __post_init__(self):
+        if self.dep_col in self.indep_cols:
+            raise ValueError(f"dep_col '{self.dep_col}' must not also appear in indep_cols {self.indep_cols}.")
+        if len(self.indep_cols) != len(set(self.indep_cols)):
+            raise ValueError(f"indep_cols contains duplicates: {self.indep_cols}")
         self.output_dir = self.output_dir_name()
         self.state_dim  = len(self.indep_cols) + 1   # betas + alpha
         self.config_file = self.output_dir + "config.json"

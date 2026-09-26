@@ -10,7 +10,8 @@ DEFAULTS = {
     "div_cagr_years": 10,
     "benchmark_refresh_days": 7,
     "lsa_variance_threshold": 0.60,
-    "news_max_age_days": 90
+    "news_max_age_days": 90,
+    "output_dir": "output/",
 }
 
 STALE_THRESHOLD = {

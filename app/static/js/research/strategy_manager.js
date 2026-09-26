@@ -106,6 +106,13 @@ export class StrategyManager {
                 out[p.key] = raw;
             }
         });
+        // Strip dep_col out of any multi_ticker (indep_cols) field if it snuck in
+        if (out.dep_col) {
+            Object.entries(out).forEach(([key, val]) => {
+                if (Array.isArray(val)) out[key] = val.filter(t => t !== out.dep_col);
+            });
+        }
+        
         return out;
     }
 

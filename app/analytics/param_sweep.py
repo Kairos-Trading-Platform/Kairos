@@ -1,7 +1,7 @@
 import dataclasses
 import itertools
 import pandas as pd
-from app.strategies.cointegration_kalman_class import (
+from app.strategies.cointegration_kalman import (
     Config, DataHandler, KalmanModel, Backtester, Performance,
 )
 

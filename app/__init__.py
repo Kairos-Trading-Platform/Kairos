@@ -36,8 +36,9 @@ def create_app():
     logging.getLogger('urllib3').setLevel(logging.WARNING)  # HTTP connection pool logs
     logging.getLogger('asyncio').setLevel(logging.WARNING)  # async internals
     # Numba internal logger
-    # yfinance internal loggers
     logging.getLogger('numba').setLevel(logging.WARNING)
+    # Matplotlib internal logger
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
     ### Keep these verbose during development
     logging.getLogger('app.utils.finance_data').setLevel(logging.INFO)

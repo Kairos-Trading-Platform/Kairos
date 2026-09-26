@@ -7,6 +7,7 @@ from statsmodels.tsa.api import VAR
 from arch.unitroot.cointegration import phillips_ouliaris
 import numpy as np
 from .config import Config
+from .exceptions import DiagnosticFailure
 
 class CointegrationModel:
     """
@@ -37,11 +38,17 @@ class CointegrationModel:
             if lvl.stat < lvl.critical_values['5%']:
                 logging.debug(f"if lvl")
                 if self.cfg.coint_enforce_i1:
-                    raise ValueError(
-                        f"'{col}' appears I(0) in this window "
-                        f"(ADF stat {lvl.stat:.3f} < crit {lvl.critical_values['5%']:.3f}). "
-                        f"VECM requires I(1) inputs."
+                    raise DiagnosticFailure(
+                        stage="i1_check",
+                        reason=f"'{col}' appears I(0) in this window (ADF stat {lvl.stat:.3f} < crit {lvl.critical_values['5%']:.3f}).",
+                        stats={"column": col, "adf_stat": lvl.stat, "adf_crit_5pct": lvl.critical_values['5%']},
+                        series={col: df_window[col]},
                     )
+                    # raise ValueError(
+                    #     f"'{col}' appears I(0) in this window "
+                    #     f"(ADF stat {lvl.stat:.3f} < crit {lvl.critical_values['5%']:.3f}). "
+                    #     f"VECM requires I(1) inputs."
+                    # )
                 else:
                     logging.warning(
                         f"'{col}' appears I(0) in this window, continuing because "
@@ -63,10 +70,17 @@ class CointegrationModel:
 
         if po.stat > po.critical_values[5]:
             if self.cfg.coint_enforce_po:
-                raise ValueError(
-                    f"PO t-stat {po.stat:.3f} > crit {po.critical_values[5]:.3f}). "
-                    f"Pairs may not be co-integrated."
+                raise DiagnosticFailure(
+                    stage="phillips_ouliaris",
+                    reason=f"PO t-stat {po.stat:.3f} > crit {po.critical_values[5]:.3f}. Pair may not be cointegrated.",
+                    stats={"po_stat": po.stat, "po_crit_5pct": po.critical_values[5], "po_pvalue": po.pvalue},
+                    series={self.cfg.dep_col: df_window[self.cfg.dep_col],
+                            **{c: df_window[c] for c in self.cfg.indep_cols}},
                 )
+                # raise ValueError(
+                #     f"PO t-stat {po.stat:.3f} > crit {po.critical_values[5]:.3f}). "
+                #     f"Pairs may not be co-integrated."
+                # )
             else:
                 logging.debug(
                     f"PO test failed (stat {po.stat:.3f} > crit "
@@ -94,12 +108,20 @@ class CointegrationModel:
 
         if results["Johansen_r=0_stat"] <= results["Johansen_r=0_crit_95"]:
             if self.cfg.coint_enforce_johansen:
-                raise ValueError(
-                    f"Johansen trace test fails to reject r=0 "
-                    f"(stat={results['Johansen_r=0_stat']:.3f} <= "
-                    f"crit={results['Johansen_r=0_crit_95']:.3f}). "
-                    f"No evidence of cointegration at the 95% level."
+                raise DiagnosticFailure(
+                    stage="johansen",
+                    reason=(f"Johansen trace fails to reject r=0 (stat={results['Johansen_r=0_stat']:.3f} "
+                            f"<= crit={results['Johansen_r=0_crit_95']:.3f})."),
+                    stats={"trace_stat": results["Johansen_r=0_stat"], "trace_crit_95": results["Johansen_r=0_crit_95"]},
+                    series={self.cfg.dep_col: df_window[self.cfg.dep_col],
+                            **{c: df_window[c] for c in self.cfg.indep_cols}},
                 )
+                # raise ValueError(
+                #     f"Johansen trace test fails to reject r=0 "
+                #     f"(stat={results['Johansen_r=0_stat']:.3f} <= "
+                #     f"crit={results['Johansen_r=0_crit_95']:.3f}). "
+                #     f"No evidence of cointegration at the 95% level."
+                # )
             else:
                 logging.warning(
                     f"Johansen trace test fails to reject r=0 — proceeding "

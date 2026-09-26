@@ -218,7 +218,10 @@ export class ResearchController extends FinAppBase {
                 this.state.portfolioMode = e.target.dataset.mode;
 
                 this.strategyManager.toggle(this.state.portfolioMode === 'strategies');
-                if (this.state.portfolioMode !== 'strategies') this.updatePortfolioView();
+                this.strategyManager.toggle(this.state.portfolioMode === 'strategies');
+                document.getElementById('screening-controls').style.display =
+                    this.state.portfolioMode === 'screening' ? 'block' : 'none';
+                if (!['strategies', 'screening'].includes(this.state.portfolioMode)) this.updatePortfolioView();
             });
         });
 

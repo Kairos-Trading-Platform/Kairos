@@ -1,5 +1,5 @@
 from app.strategies.base import BaseStrategy, StrategyParam, StrategyResult, StrategyRegistry
-from app.strategies.cointegration_kalman_class import (
+from app.strategies.cointegration_kalman import (
     Config, DataHandler, CointegrationModel, KalmanModel, KalmanMLE, Backtester, Performance
 )
 

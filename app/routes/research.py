@@ -11,7 +11,8 @@ from flask.views import MethodView
 from statsmodels.tools import add_constant
 from app.analytics.component_registry import ComponentRegistry
 from app.analytics.param_sweep import ParamSweepRunner
-from app.strategies.cointegration_kalman_class import Config, DataHandler, CointegrationModel, KalmanMLE
+from app.strategies.cointegration_kalman import Config, DataHandler, CointegrationModel, KalmanMLE
+from app.strategies.cointegration_kalman.screening import ScreeningLog
 import logging
 logger = logging.getLogger(__name__)
 
@@ -294,3 +295,45 @@ def run_component_sweep():
     df = (runner.sweep_grid(param_values, entry_z) if mode == 'grid'
           else runner.sweep_single(*next(iter(param_values.items())), entry_z=entry_z))
     return jsonify({"results": df.to_dict(orient='records')})
+
+
+def _screening_log() -> ScreeningLog:
+    return ScreeningLog(root_dir=current_app.config['APP_CONFIG'].get('output_dir'))
+
+@bp.route('/research/screening')
+@timed
+def screening_history():
+    """Everything tested so far: pass/fail, reason, proof plot."""
+    return jsonify(_screening_log().load())
+
+@bp.route('/research/screening/test', methods=['POST'])
+@timed
+def screening_test():
+    """Ad-hoc single-pair check, run through the same DataHandler/
+    CointegrationModel path used everywhere else, so failures are
+    explained identically whether hit via the sweep or the dashboard."""
+    payload = request.get_json()
+    dep, indep = payload.get('dep_col'), payload.get('indep_cols', [])
+    if not (dep and indep):
+        return jsonify({"error": "dep_col and indep_cols required"}), 400
+
+    assets_data = current_app.extensions["research_dm"].get_data_for_tickers([dep, *indep])
+    cfg = Config(dep_col=dep, indep_cols=indep)
+    log = _screening_log()
+
+    try:
+        data = DataHandler(cfg=cfg, df=assets_data[[dep, *indep]], log=cfg.log_prices)
+        model = CointegrationModel(cfg=cfg)
+        res = model.fit(data.df.tail(cfg.bt_window))
+        confidence = model.get_model_confidence(res)
+        log.record_pass(dep, indep, confidence, cfg.output_dir)
+        return jsonify({"status": "passed", "summary": confidence})
+    except Exception as exc:
+        log.record_failure(dep, indep, exc, cfg.output_dir)
+        return jsonify({
+            "status": "failed",
+            "stage": getattr(exc, "stage", "unexpected_error"),
+            "reason": str(exc),
+            "stats": getattr(exc, "stats", {}),
+            "fig_data": log.last_plot_json,
+        })

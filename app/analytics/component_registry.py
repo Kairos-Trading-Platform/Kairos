@@ -1,8 +1,8 @@
 from __future__ import annotations
 import dataclasses
-from app.strategies.cointegration_kalman_class import (
+from app.strategies.cointegration_kalman import (
     Config, CointegrationModel, KalmanModel, KalmanMLE, SignalEngine,
-    Portfolio, SignalQualityModel, XGBoostQualityModel, KoopmanRegimeFilter,
+    Portfolio, RandomForestModel, XGBoostModel, KoopmanRegimeFilter,
     Backtester, WalkForwardValidator,
 )
 
@@ -61,10 +61,10 @@ ComponentRegistry.register("signal_engine", "Signal Engine", SignalEngine,
 ComponentRegistry.register("portfolio", "Portfolio Sizing", Portfolio,
     ["capital", "target_vol", "cost_bps"])
 
-ComponentRegistry.register("random_forest", "Random Forest Gate", SignalQualityModel,
+ComponentRegistry.register("random_forest", "Random Forest Gate", RandomForestModel,
     ["rf_n_estimators", "rf_n_splits", "rf_threshold"])
 
-ComponentRegistry.register("xgboost", "XGBoost Gate", XGBoostQualityModel,
+ComponentRegistry.register("xgboost", "XGBoost Gate", XGBoostModel,
     ["xgb_n_estimators", "xgb_max_depth", "xgb_learning_rate", "xgb_subsample", "xgb_threshold"])
 
 ComponentRegistry.register("koopman", "Koopman Regime Filter", KoopmanRegimeFilter,

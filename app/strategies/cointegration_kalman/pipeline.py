@@ -16,6 +16,8 @@ from .signal_engine import SignalEngine
 from .koopman import KoopmanRegimeFilter
 from .quality_models import RandomForestModel, XGBoostModel
 from .executor import StrategyExecutor
+from .exceptions import DiagnosticFailure
+from .screening import ScreeningLog
 
 def run_production(data: DataHandler,
                    cfg: Config,
@@ -196,6 +198,7 @@ def compute_and_save_all_pairs(df_all, cfg = Config):
     """
     columns = df_all.columns.tolist()
     pairs = list(combinations(columns, 2))
+    screening_log = ScreeningLog(root_dir=cfg.output_dir)
 
     for dep_col, indep_col in pairs:
         pair_cfg = dataclasses.replace(
@@ -210,31 +213,36 @@ def compute_and_save_all_pairs(df_all, cfg = Config):
                 continue
 
         logging.info(f"\nProcessing pair: {dep_col} vs {indep_col}")
-        
-        selected_columns = [dep_col, indep_col]
 
-        # Split data
-        df_raw = df_all[selected_columns]
-        df_train, df_test = train_test_split(df_raw, test_size=0.3, random_state=42, shuffle=False)
-        #logging.info("Data split")
+        try:
+            selected_columns = [dep_col, indep_col]
 
-        # Prepare data
-        data = DataHandler(cfg=pair_cfg, df=df_train, log=pair_cfg.log_prices)
-        data.summary()
+            # Split data
+            df_raw = df_all[selected_columns]
+            df_train, df_test = train_test_split(df_raw, test_size=0.3, random_state=42, shuffle=False)
+            #logging.info("Data split")
 
-        # Fit model
-        model = CointegrationModel(cfg=pair_cfg)
-        res = model.fit(data.df)
-        logging.info("Model fit")
+            # Prepare data
+            data = DataHandler(cfg=pair_cfg, df=df_train, log=pair_cfg.log_prices)
+            data.summary()
 
-        confidence_metrics = model.get_model_confidence(res)
-        res.update({f"CONF_{k}": v for k, v in confidence_metrics.items()})
-        summary_df = pd.DataFrame.from_dict(res, orient='index', columns=['Value'])
-        logging.info("Data summary created")
+            # Fit model
+            model = CointegrationModel(cfg=pair_cfg)
+            res = model.fit(data.df)
+            logging.info("Model fit")
 
-        # Save summary
-        summary_df.to_csv(summary_filename)
-        logging.info(f"Summary saved to: {summary_filename}")
+            confidence_metrics = model.get_model_confidence(res)
+            res.update({f"CONF_{k}": v for k, v in confidence_metrics.items()})
+            summary_df = pd.DataFrame.from_dict(res, orient='index', columns=['Value'])
+            logging.info("Data summary created")
+            screening_log.record_pass(dep_col, indep_col, confidence_metrics, pair_cfg.output_dir)
+        except Exception as exc:
+            logging.warning(f"Pair {dep_col} vs {indep_col} rejected: {exc}")
+            screening_log.record_failure(dep_col, indep_col, exc, pair_cfg.output_dir)
+            continue
+            # # Save summary
+            # summary_df.to_csv(summary_filename)
+            # logging.info(f"Summary saved to: {summary_filename}")
     else:
         logging.info(f"Results already exist for {dep_col} vs {indep_col}. Skipping.")
 

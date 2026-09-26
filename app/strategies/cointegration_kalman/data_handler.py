@@ -4,6 +4,8 @@ import numpy as np
 import logging # TODO logger
 from arch.unitroot import ADF
 from statsmodels.tools import add_constant
+from .exceptions import DiagnosticFailure
+from .diagnostics import StatisticalTestEngine
 
 class DataHandler:
     """
@@ -28,6 +30,17 @@ class DataHandler:
     def _prepare(self, df: pd.DataFrame) -> pd.DataFrame:
         # Ensure datetime index and drop initial NaNs
         df = df.copy()
+
+        # Check for input
+        if df.columns.duplicated().any():
+            dupes = df.columns[df.columns.duplicated()].unique().tolist()
+            raise DiagnosticFailure(
+                stage="input_validation",
+                reason=(f"Duplicate column(s) {dupes} in input data — a ticker was likely "
+                        f"passed as both dep_col and indep_cols, or listed twice in indep_cols."),
+                stats={"duplicate_columns": dupes},
+            )
+        
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.DatetimeIndex(df.index)
         
@@ -45,24 +58,49 @@ class DataHandler:
         return df
 
     def _check_integration_order(self, df: pd.DataFrame, alpha: float = 0.05):
+        test_engine = StatisticalTestEngine()
         for col in df.columns:
             logging.debug(f"Integration check for {col}")
             adf_level = ADF(df[col], trend=self.cfg.adf_trend, method="bic")
             if adf_level.pvalue < alpha:
-                raise ValueError(
-                    f"Column '{col}' appears stationary in levels "
-                    f"(ADF p={adf_level.pvalue:.4f} < {alpha}). "
-                    f"Expected I(1) series. Check your input data."
+                window = min(120, max(20, len(df) // 3))
+                adf_stat, _, crit_5pct = test_engine.rolling_adf(df[col].values, window=window)
+                raise DiagnosticFailure(
+                    stage="integration_order_level",
+                    reason=(f"Column '{col}' appears stationary in levels "
+                            f"(ADF p={adf_level.pvalue:.4f} < {alpha}). Expected I(1) series."),
+                    stats={"column": col, "adf_level_stat": adf_level.stat,
+                        "adf_level_pvalue": adf_level.pvalue,
+                        "adf_level_crit_5pct": adf_level.critical_values['5%']},
+                    series={
+                        col: df[col],
+                        f"{col}_rolling_adf_stat": pd.Series(adf_stat, index=df.index),
+                        f"{col}_rolling_adf_crit_5pct": pd.Series(crit_5pct, index=df.index),
+                    },
                 )
+                # raise ValueError(
+                #     f"Column '{col}' appears stationary in levels "
+                #     f"(ADF p={adf_level.pvalue:.4f} < {alpha}). "
+                #     f"Expected I(1) series. Check your input data."
+                # )
             else:
                 logging.info(f"Cannot reject level stationarity hypothesis: p={adf_level.pvalue:.4f} > {alpha})")
             adf_diff = ADF(df[col].diff().dropna(), trend=self.cfg.adf_trend, method="bic")
             if adf_diff.pvalue >= alpha:
-                raise ValueError(
-                    f"Column '{col}' does not become stationary after one difference "
-                    f"(ADF p={adf_diff.pvalue:.4f} >= {alpha}). "
-                    f"May be I(2) or have structural breaks. Check your input data."
+                raise DiagnosticFailure(
+                    stage="integration_order_diff",
+                    reason=(f"Column '{col}' does not become stationary after one difference "
+                            f"(ADF p={adf_diff.pvalue:.4f} >= {alpha}). May be I(2)."),
+                    stats={"column": col, "adf_diff_stat": adf_diff.stat,
+                        "adf_diff_pvalue": adf_diff.pvalue,
+                        "adf_diff_crit_5pct": adf_diff.critical_values['5%']},
+                    series={col: df[col], f"{col}_diff": df[col].diff().dropna()},
                 )
+                # raise ValueError(
+                #     f"Column '{col}' does not become stationary after one difference "
+                #     f"(ADF p={adf_diff.pvalue:.4f} >= {alpha}). "
+                #     f"May be I(2) or have structural breaks. Check your input data."
+                # )
             else:
                 logging.info(f"We reject the first diff stationarity hypothesis: p={adf_diff.pvalue:.4f} < {alpha})")
 

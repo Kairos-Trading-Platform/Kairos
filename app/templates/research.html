@@ -48,6 +48,18 @@
                     </details>
                 </div>
             </div>
+            <div class="portfolio-tab" data-mode="screening">Screening</div>
+            <div id="screening-controls" style="display:none; padding:10px;">
+                <input id="screening-dep" placeholder="dep_col (e.g. ADA-USD)">
+                <input id="screening-indep" placeholder="indep_cols, comma-separated (e.g. AMT)">
+                <button id="screening-test-btn">Test pair</button>
+                <div id="screening-result" style="padding:8px 0; font-weight:bold;"></div>
+                <div id="screening-plot-container"></div>
+                <table id="screening-history-table">
+                    <thead><tr><th>Pair</th><th>Status</th><th>Stage</th><th>Reason</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
         
         <div id="tab-actions" style="padding-top: 10px;">
@@ -139,11 +151,13 @@
     <script type="module">
         import { ResearchController } from '{{ url_for("static", filename="js/research/research_controller.js") }}';
         import { ComponentSweepUI } from '{{ url_for("static", filename="js/research/component_sweep_ui.js") }}';
+        import { ScreeningUI } from '{{ url_for("static", filename="js/research/screening_ui.js") }}';
 
         document.addEventListener('DOMContentLoaded', () => {
             console.log("Initialising research app...");
             window.activeApp = new ResearchController({ selectedTicker: "{{ selected_ticker | default('', true) }}" });
             new ComponentSweepUI();
+            new ScreeningUI(window.activeApp);
         });
     </script>
     {% endblock %}

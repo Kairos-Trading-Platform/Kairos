@@ -281,9 +281,9 @@ def run_component_sweep():
     if not (dep and indep and param_values):
         return jsonify({"error": "dep_col, indep_cols, param_values required"}), 400
 
-    stocks_data = current_app.extensions["research_dm"].get_data(asset_type='stocks')
+    assets_data = current_app.extensions["research_dm"].get_data_for_tickers([dep, *indep])
     base_cfg = Config(dep_col=dep, indep_cols=indep)
-    data = DataHandler(cfg=base_cfg, df=stocks_data[[dep, *indep]], log=base_cfg.log_prices)
+    data = DataHandler(cfg=base_cfg, df=assets_data[[dep, *indep]], log=base_cfg.log_prices)
 
     res = CointegrationModel(cfg=base_cfg).fit(data.df.tail(base_cfg.bt_window))
     mle = KalmanMLE(init_beta=res["VECM_beta"][1:], init_alpha=res["VECM_alpha"], cfg=base_cfg)

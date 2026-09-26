@@ -18,18 +18,19 @@ def strategy_schema(key):
 def run_strategy(key):
     s = StrategyRegistry.get(key)
     params = request.get_json()
+    dep, indep = params.get('dep_col'), params.get('indep_cols', [])
+
+    dm = current_app.extensions["research_dm"]
+    price_history = dm.get_data_for_tickers([dep, *indep])
 
     # Get tickers from params if specified
-    requested = params.get('dep_col') or params.get('tickers')
+    requested = dep or params.get('tickers')
     if isinstance(requested, list):
-        requested.extend(params.get('indep_cols', []))
+        requested.extend(indep)
     
     available = set(price_history.columns)
     missing = set(requested) - available if requested else set()
 
-    dm = current_app.extensions["research_dm"]
-    price_history = dm.get_data(asset_type=params.get('asset_type', 'stocks'))   # reuse existing data source
-    
     current_app.logger.info(f"price_history shape: {price_history.shape}")
     current_app.logger.info(f"price_history columns: {price_history.columns.tolist() if not price_history.empty else 'EMPTY'}")
     current_app.logger.info(f"price_history index type: {type(price_history.index)}")

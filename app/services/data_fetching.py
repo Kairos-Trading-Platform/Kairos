@@ -48,3 +48,31 @@ class ResearchDataManager:
             df = df.loc[tickers]  # Reorder to match tickers
         
         return df
+
+    def _ticker_asset_type(self, ticker: str) -> str:
+        """Resolve which finance manager's universe a ticker belongs to."""
+        for asset_type, finance in self.finance_managers.items():
+            metrics = finance._load_json(finance._metrics_path, default={})
+            if ticker in metrics:
+                return asset_type
+        raise KeyError(f"Ticker '{ticker}' not found in any configured universe")
+
+    def get_data_for_tickers(self, tickers: list[str]) -> pd.DataFrame:
+        """Fetch and merge price history for tickers spanning multiple asset classes."""
+        interval = self.config.get("research_interval")
+        by_asset_type: dict[str, list[str]] = {}
+        for t in tickers:
+            by_asset_type.setdefault(self._ticker_asset_type(t), []).append(t)
+
+        frames = []
+        for asset_type, group in by_asset_type.items():
+            finance = self.finance_managers[asset_type]
+            finance._ensure_prices(group, interval, force=False)
+            df = finance._hist_prices.get(interval)
+            if df is None:
+                raise RuntimeError(f"No data for interval '{interval}' in '{asset_type}'")
+            if set(group).issubset(df.index):
+                df = df.T
+            frames.append(df[group])
+
+        return pd.concat(frames, axis=1)

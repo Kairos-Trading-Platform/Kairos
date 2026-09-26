@@ -17,8 +17,8 @@ class CointegrationKalmanStrategy(BaseStrategy):
 
     def run(self, price_history, params) -> StrategyResult:
         cfg = Config(dep_col=params["dep_col"], indep_cols=params["indep_cols"],
-                     bt_window=params.get("bt_window", 252),
-                     entry_z_percentile=params.get("entry_z_percentile", 90.0))
+                     bt_window=int(params.get("bt_window", 252)),
+                     entry_z_percentile=float(params.get("entry_z_percentile", 90.0)))
 
         cols = [cfg.dep_col, *cfg.indep_cols]
         data = DataHandler(cfg=cfg, df=price_history[cols], log=cfg.log_prices)
@@ -31,7 +31,7 @@ class CointegrationKalmanStrategy(BaseStrategy):
         kf = KalmanModel(W_diag=opt[:cfg.state_dim], V=opt[cfg.state_dim], cfg=cfg)
         kf.initialise(res["VECM_beta"][1:], res["VECM_alpha"])
 
-        bt = Backtester(data=data, kf=kf, cfg=cfg, entry_z=params.get("entry_z_percentile", 90.0))
+        bt = Backtester(data=data, kf=kf, cfg=cfg, entry_z=float(params.get("entry_z_percentile", 90.0)))
         results = bt.run()
         metrics = Performance(cfg).evaluate(results, label=self.key)
 

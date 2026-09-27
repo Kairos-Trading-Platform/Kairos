@@ -44,7 +44,6 @@
 │   │       └── data_fetching.cpython-312.pyc
 │   ├── static
 │   │   ├── js
-│   │   │   ├── app.js
 │   │   │   ├── core
 │   │   │   │   └── base.js
 │   │   │   ├── notifications
@@ -56,7 +55,9 @@
 │   │   │   │   └── ticker_manager.js
 │   │   │   └── research
 │   │   │       ├── component_sweep_ui.js
+│   │   │       ├── family_tab_controller.js
 │   │   │       ├── research_controller.js
+│   │   │       ├── screening_ui.js
 │   │   │       └── strategy_manager.js
 │   │   ├── main.js
 │   │   └── style.css
@@ -68,6 +69,7 @@
 │   │   │   ├── config.py
 │   │   │   ├── data_handler.py
 │   │   │   ├── diagnostics.py
+│   │   │   ├── exceptions.py
 │   │   │   ├── executor.py
 │   │   │   ├── __init__.py
 │   │   │   ├── kalman.py
@@ -82,6 +84,7 @@
 │   │   │   │   ├── config.cpython-312.pyc
 │   │   │   │   ├── data_handler.cpython-312.pyc
 │   │   │   │   ├── diagnostics.cpython-312.pyc
+│   │   │   │   ├── exceptions.cpython-312.pyc
 │   │   │   │   ├── executor.cpython-312.pyc
 │   │   │   │   ├── __init__.cpython-312.pyc
 │   │   │   │   ├── kalman.cpython-312.pyc
@@ -90,9 +93,11 @@
 │   │   │   │   ├── pipeline.cpython-312.pyc
 │   │   │   │   ├── portfolio.cpython-312.pyc
 │   │   │   │   ├── quality_models.cpython-312.pyc
+│   │   │   │   ├── screening.cpython-312.pyc
 │   │   │   │   ├── signal_engine.cpython-312.pyc
 │   │   │   │   └── walk_forward.cpython-312.pyc
 │   │   │   ├── quality_models.py
+│   │   │   ├── screening.py
 │   │   │   ├── signal_engine.py
 │   │   │   └── walk_forward.py
 │   │   ├── __init__.py
@@ -221,11 +226,19 @@
 ├── output
 │   ├── ADA-USD_vs_ADA-USD_AED_AMT
 │   ├── ADA-USD_vs_AED
+│   ├── ADA-USD_vs_AED_AMT
 │   ├── ADA-USD_vs_AMT
 │   ├── ADA-USD_vs_ETH-USD
+│   ├── ADA-USD_vs_PEPE24478-USD
 │   ├── AMAT_vs_LRCX
 │   ├── AMT_vs_AED
+│   ├── AMT_vs_BNP
+│   ├── BNB-USD_vs_ADA-USD
 │   ├── BNP_vs_ISP
+│   ├── BTC-USD_vs_ADA-USD
+│   ├── ISP_vs_BNP
+│   ├── PEPE24478-USD_vs_ADA-USD
+│   ├── screening_log.jsonl
 │   └── XNDU_vs_QBTS
 ├── __pycache__
 │   ├── app.cpython-312.pyc
@@ -242,4 +255,4 @@
 ├── requirements.txt
 └── test_orchestrator.py
 
-37 directories, 206 files
+44 directories, 212 files

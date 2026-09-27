@@ -1,4 +1,6 @@
 import { StrategyManager } from '/static/js/research/strategy_manager.js'
+import { FamilyTabController } from '/static/js/research/family_tab_controller.js'
+import { ScreeningUI } from '/static/js/research/screening_ui.js'
 import { FinAppBase } from '/static/js/core/base.js';
 
 export class ResearchController extends FinAppBase {
@@ -33,19 +35,14 @@ export class ResearchController extends FinAppBase {
         this.updatePortfolioView();
         this.refreshSidebarUI();
         this.strategyManager = new StrategyManager(this);
-        this.strategyManager.init();
+        await this.strategyManager.init();
+        this.familyTabs = new FamilyTabController(this.strategyManager, new ScreeningUI(this));
+        await this.familyTabs.init();
 
         // Reflow plots when container resizes
         if (this.dom.tickerContainer) {
-            const resizeObserver = new ResizeObserver(() => {
-                // Check if Plotly has drawn inside the container before trying to relayout
-                if (this.dom.tickerContainer.data) {
-                    Plotly.relayout(this.dom.tickerContainer, {
-                        height: this.dom.tickerContainer.offsetHeight
-                    });
-                }
-            });
-            resizeObserver.observe(this.dom.tickerContainer);
+            this._observePlotResize(this.dom.tickerContainer);
+            this._observePlotResize(this.dom.portfolioContainer);
         }
         window.activeApp = this;
     }
@@ -88,9 +85,7 @@ export class ResearchController extends FinAppBase {
                 { ...plotData.layout, autosize: true },
                 data.config || {}
             );
-            Plotly.relayout(this.dom.tickerContainer, {
-                height: this.dom.tickerContainer.offsetHeight || 500
-            });
+            this._lockPlotHeight(this.dom.tickerContainer); 
             this.preventScrollOnDropdown('price-plot-container');
             this.updateMetrics(data.metrics);
         } catch (err) {
@@ -150,6 +145,7 @@ export class ResearchController extends FinAppBase {
             const fig = JSON.parse(data.fig_data);
             const config = (this.state.portfolioMode === 'heatmap') ? { displayModeBar: false } : {};
             Plotly.react(this.dom.portfolioContainer, fig.data, fig.layout, config);
+            this._lockPlotHeight(this.dom.portfolioContainer);
         } catch (err) {
             console.error("Portfolio Plot Error:", err);
         }
@@ -216,12 +212,7 @@ export class ResearchController extends FinAppBase {
                 this.dom.portfolioTabs.forEach(t => t.classList.remove('portfolio-active-tab'));
                 e.target.classList.add('portfolio-active-tab');
                 this.state.portfolioMode = e.target.dataset.mode;
-
-                this.strategyManager.toggle(this.state.portfolioMode === 'strategies');
-                this.strategyManager.toggle(this.state.portfolioMode === 'strategies');
-                document.getElementById('screening-controls').style.display =
-                    this.state.portfolioMode === 'screening' ? 'block' : 'none';
-                if (!['strategies', 'screening'].includes(this.state.portfolioMode)) this.updatePortfolioView();
+                this.updatePortfolioView();
             });
         });
 

@@ -83,13 +83,15 @@ class Backtester:
 
             # Cointegration fit for features (does NOT reset the filter)
             try:
-                coint_res      = self.coint.fit(df_window)
+                coint_res = self.coint.fit(df_window)
                 po_stats.append(coint_res["PO_p_value"])
-                beta_vecm      = coint_res["VECM_beta"][1:]
-                alpha_vecm     = coint_res["VECM_alpha"]
+                beta_vecm = coint_res["VECM_beta"][1:]
+                alpha_vecm = coint_res["VECM_alpha"]
+                confidence = self.coint.get_model_confidence(coint_res)
                 ext_feat = {
                     self.cfg.JOHANSEN_TRACE: coint_res["johansen"].trace_stat[0],
-                    self.cfg.HALF_LIFE: coint_res["half_life"]
+                    self.cfg.HALF_LIFE: coint_res["half_life"],
+                    self.cfg.COINT_CONFIDENCE: confidence["total_confidence"],
                 }
                 coint_ok = True
             except Exception as exc:
@@ -98,7 +100,8 @@ class Backtester:
                 coint_ok = False
                 ext_feat = {
                     self.cfg.JOHANSEN_TRACE: 0.0,
-                    self.cfg.HALF_LIFE:      0.0,
+                    self.cfg.HALF_LIFE: 0.0,
+                    self.cfg.COINT_CONFIDENCE: 0.0,
                 }
                 continue
 

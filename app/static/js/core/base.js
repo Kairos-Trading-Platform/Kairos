@@ -116,6 +116,25 @@ export class FinAppBase {
         Plotly.react(container, fig.data, { ...fig.layout, ...extraLayout });
     }
 
+    _lockPlotHeight(container, forceRecalc = false) {
+        if (!container) return;
+        if (forceRecalc || container.dataset.lockedHeight === undefined) {
+            container.dataset.lockedHeight = container.offsetHeight || 500;
+        }
+        Plotly.relayout(container, { height: Number(container.dataset.lockedHeight) });
+    }
+
+    _observePlotResize(container) {
+        if (!container) return;
+        new ResizeObserver(() => {
+            if (!container.data) return;
+            if (container.offsetWidth !== lastWidth) {
+                lastWidth = container.offsetWidth;
+                Plotly.Plots.resize(container); // reflow at fixed height, no relayout needed
+            }
+        }).observe(container);
+    }
+
     // Helper to safely update text content
     setText(id, text) {
         const el = document.getElementById(id);

@@ -411,6 +411,41 @@ table {
     flex-direction: column;
 }
 
+/* Ensure consistent viewing of portfolio/strategies */
+.research-layout,
+.stats-page-layout {
+    display: flex;
+    gap: 15px;
+    align-items: stretch;
+}
+
+.research-layout > .portfolio-panel,
+.research-layout > .strategy-panel {
+    flex: 1 1 50%;
+    min-width: 0;
+    background: white;
+    padding: 10px;
+}
+@media (max-width: 900px) {
+    .research-layout { flex-direction: column; }
+    .research-layout > .portfolio-panel,
+    .research-layout > .strategy-panel { flex: 1 1 auto; }
+}
+
+.strategy-chip {
+    display: inline-block;
+    margin: 0 6px 6px 0;
+    padding: 6px 12px;
+    border: 1px solid #007BFF;
+    border-radius: 20px;
+    background: white;
+    color: #007BFF;
+    cursor: pointer;
+    font-size: 0.85em;
+}
+.strategy-chip:hover { background: #e9f3ff; }
+.strategy-chip.active-chip { background: #007BFF; color: white; }
+
 #price-plot-container {
     flex: 1 1 0;           /* grow, shrink, start from 0 */
     min-height: 0;         /* critical — allows flex child to shrink below content size */

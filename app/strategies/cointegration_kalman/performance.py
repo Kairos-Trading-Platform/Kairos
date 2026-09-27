@@ -133,36 +133,68 @@ class Performance:
         plt.close()
         logging.info(f"Performance plot saved to {fname}")
 
-    def plot_z_linearity(self, results: pd.DataFrame, label: str = "", bins: int = 5):
-        """
-        Check if stronger Z-scores lead to higher average returns.
-        Belongs in Research Diagnostics.
-        """
+    # def plot_z_linearity(self, results: pd.DataFrame, label: str = "", bins: int = 5):
+    #     """
+    #     Check if stronger Z-scores lead to higher average returns.
+    #     Belongs in Research Diagnostics.
+    #     """
+    #     df = results.copy()
+    #     # Use absolute Z-score to measure the 'strength' of the signal
+    #     # We assume the Z-score column is available in results via config
+    #     z_col = self.cfg.Z_SCORE # Ensure this is in your Config class
+    #     df['abs_z'] = df[z_col].abs()
+        
+    #     # Create quintiles
+    #     df['z_bin'] = pd.qcut(df['abs_z'], bins, 
+    #                          labels=[f'Q{i+1}' for i in range(bins)])
+        
+    #     linearity = df.groupby('z_bin', observed=True)[self.cfg.PNL_RETURN].mean()
+        
+    #     plt.figure(figsize=(8, 5))
+    #     linearity.plot(kind='bar', color='skyblue', edgecolor='black')
+    #     plt.axhline(0, color='black', linewidth=0.8)
+    #     plt.title(f"Z-Score Linearity [{label}]")
+    #     plt.ylabel("Mean Bar Return")
+    #     plt.xlabel("Z-Score Magnitude Quintile")
+    #     plt.tight_layout()
+        
+    #     fname = os.path.join(self.cfg.output_dir,f"z_linearity_{label}.png")
+    #     plt.savefig(fname)
+    #     plt.close()
+    #     logging.info(f"Z-Linearity plot saved to {fname}")
+    #     return linearity
+
+    def plot_metric_linearity(self, results, metric_col, label="", bins=5, metric_name=None):
+        """Bins any strength metric (z-score, cointegration confidence, ...) 
+        into quantiles and plots mean bar PnL per bin."""
+        metric_name = metric_name or metric_col
         df = results.copy()
-        # Use absolute Z-score to measure the 'strength' of the signal
-        # We assume the Z-score column is available in results via config
-        z_col = self.cfg.Z_SCORE # Ensure this is in your Config class
-        df['abs_z'] = df[z_col].abs()
-        
-        # Create quintiles
-        df['z_bin'] = pd.qcut(df['abs_z'], bins, 
-                             labels=[f'Q{i+1}' for i in range(bins)])
-        
-        linearity = df.groupby('z_bin', observed=True)[self.cfg.PNL_RETURN].mean()
-        
+        m = df[metric_col]
+        df['abs_metric'] = m.abs() if m.min() < 0 else m
+        df['metric_bin'] = pd.qcut(df['abs_metric'], bins,
+                                    labels=[f'Q{i+1}' for i in range(bins)],
+                                    duplicates='drop')
+        linearity = df.groupby('metric_bin', observed=True)[self.cfg.PNL_RETURN].mean()
+
         plt.figure(figsize=(8, 5))
         linearity.plot(kind='bar', color='skyblue', edgecolor='black')
         plt.axhline(0, color='black', linewidth=0.8)
-        plt.title(f"Z-Score Linearity [{label}]")
+        plt.title(f"{metric_name} Linearity [{label}]")
         plt.ylabel("Mean Bar Return")
-        plt.xlabel("Z-Score Magnitude Quintile")
+        plt.xlabel(f"{metric_name} Quintile")
         plt.tight_layout()
-        
-        fname = os.path.join(self.cfg.output_dir,f"z_linearity_{label}.png")
+        fname = os.path.join(self.cfg.output_dir, f"{metric_name}_linearity_{label}.png")
         plt.savefig(fname)
         plt.close()
-        logging.info(f"Z-Linearity plot saved to {fname}")
+        logging.info(f"{metric_name} linearity plot saved to {fname}")
         return linearity
+
+    def plot_z_linearity(self, results, label="", bins=5):
+        return self.plot_metric_linearity(results, self.cfg.Z_SCORE, label, bins, "Z-Score")
+
+    def plot_coint_confidence_linearity(self, results, label="", bins=5):
+        """Where does the strategy break down as cointegration weakens?"""
+        return self.plot_metric_linearity(results, self.cfg.COINT_CONFIDENCE, label, bins, "Coint-Confidence")
 
     def calculate_ic_decay(self, results: pd.DataFrame, horizons=[1, 2, 5, 10, 20]):
         """

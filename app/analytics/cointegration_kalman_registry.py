@@ -5,7 +5,7 @@ from app.strategies.cointegration_kalman import (
 
 @StrategyRegistry.register
 class CointegrationKalmanStrategy(BaseStrategy):
-    key, label = "coint_kalman", "Cointegration Kalman Pairs"
+    key, label, family = "coint_kalman", "Cointegration Kalman Pairs", "Kalman"
 
     def param_schema(self):
         return [

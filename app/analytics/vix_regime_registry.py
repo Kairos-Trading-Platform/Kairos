@@ -5,7 +5,7 @@ from app.strategies.vix_regime_modeling import (
 
 @StrategyRegistry.register
 class VixRegimeStrategy(BaseStrategy):
-    key, label = "vix_regime", "VIX Regime Rotation (HMM)"
+    key, label, family = "vix_regime", "VIX Regime Rotation (HMM)", "VIXHMM"
 
     def param_schema(self):
         return [

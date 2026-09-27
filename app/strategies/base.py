@@ -42,4 +42,4 @@ class StrategyRegistry:
 
     @classmethod
     def list(cls) -> list[dict]:
-        return [{"key": k, "label": v.label} for k, v in cls._registry.items()]
+        return [{"key": k, "label": v.label, "family": v.family} for k, v in cls._registry.items()]

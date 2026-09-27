@@ -97,6 +97,7 @@ class Config:
     # for stable VECM estimates.  The scanner will not accept any window shorter
     # than this value, even if it passes the cointegration tests.
     coint_min_window: int  = 252
+    COINT_CONFIDENCE: str = "feat_coint_confidence"
  
     # --- Signal ---
     entry_z_percentile: float = 90.0  # percentile of abs(z-score) used as entry_z

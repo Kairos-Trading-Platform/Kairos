@@ -7,7 +7,7 @@ bp = Blueprint('strategies', __name__)
 
 @bp.route('/strategies')
 def list_strategies():
-    return jsonify(StrategyRegistry.list())
+    return jsonify(StrategyRegistry.list()) 
 
 @bp.route('/strategies/<key>/schema')
 def strategy_schema(key):

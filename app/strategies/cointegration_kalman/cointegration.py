@@ -22,7 +22,9 @@ class CointegrationModel:
 
     def fit(self, df_window: pd.DataFrame) -> dict:
         results = {}
-        
+        failures = [] # (stage, reason) — only enforced ones land here
+        series_for_plot = {c: df_window[c] for c in df_window.columns}
+
         # ADF tests (Level & Diff)
         for col in df_window.columns:
             logging.debug(f"Trend for {col}: {self.cfg.adf_trend}")
@@ -36,24 +38,10 @@ class CointegrationModel:
             results[f"ADF_{col}_dif_crit"] = df1.critical_values['5%']
 
             if lvl.stat < lvl.critical_values['5%']:
-                logging.debug(f"if lvl")
-                if self.cfg.coint_enforce_i1:
-                    raise DiagnosticFailure(
-                        stage="i1_check",
-                        reason=f"'{col}' appears I(0) in this window (ADF stat {lvl.stat:.3f} < crit {lvl.critical_values['5%']:.3f}).",
-                        stats={"column": col, "adf_stat": lvl.stat, "adf_crit_5pct": lvl.critical_values['5%']},
-                        series={col: df_window[col]},
-                    )
-                    # raise ValueError(
-                    #     f"'{col}' appears I(0) in this window "
-                    #     f"(ADF stat {lvl.stat:.3f} < crit {lvl.critical_values['5%']:.3f}). "
-                    #     f"VECM requires I(1) inputs."
-                    # )
-                else:
-                    logging.warning(
-                        f"'{col}' appears I(0) in this window, continuing because "
-                        f"coint_enforce_i1=False."
-                    )
+                reason = (f"'{col}' appears I(0) (ADF {lvl.stat:.3f} < "
+                          f"crit {lvl.critical_values['5%']:.3f}).")
+                (failures.append(("adf_level_i1", reason)) if self.cfg.coint_enforce_i1
+                 else logging.warning(reason + " Continuing (coint_enforce_i1=False)."))
             if df1.stat > df1.critical_values['5%']:        # fails to reject after differencing -> I(2)+
                 logging.warning(
                     f"'{col}' may be I(2) in this window (ADF on diff: "
@@ -61,32 +49,16 @@ class CointegrationModel:
                 )
 
         # Phillips Ouliaris test
-        po = phillips_ouliaris(
-                            df_window[self.cfg.dep_col], df_window[self.cfg.indep_cols], trend=self.cfg.adf_trend, test_type="Za", kernel="bartlett"
-                        )
+        po = phillips_ouliaris(df_window[self.cfg.dep_col], df_window[self.cfg.indep_cols],
+                                trend=self.cfg.adf_trend, test_type="Za", kernel="bartlett")
         results["PO_stat"] = po.stat
         results["PO_crit"] = po.critical_values[5]
         results["PO_p_value"] = po.pvalue
 
         if po.stat > po.critical_values[5]:
-            if self.cfg.coint_enforce_po:
-                raise DiagnosticFailure(
-                    stage="phillips_ouliaris",
-                    reason=f"PO t-stat {po.stat:.3f} > crit {po.critical_values[5]:.3f}. Pair may not be cointegrated.",
-                    stats={"po_stat": po.stat, "po_crit_5pct": po.critical_values[5], "po_pvalue": po.pvalue},
-                    series={self.cfg.dep_col: df_window[self.cfg.dep_col],
-                            **{c: df_window[c] for c in self.cfg.indep_cols}},
-                )
-                # raise ValueError(
-                #     f"PO t-stat {po.stat:.3f} > crit {po.critical_values[5]:.3f}). "
-                #     f"Pairs may not be co-integrated."
-                # )
-            else:
-                logging.debug(
-                    f"PO test failed (stat {po.stat:.3f} > crit "
-                    f"{po.critical_values[5]:.3f}) — continuing because "
-                    f"coint_enforce_po=False."
-                )
+            reason = f"PO t-stat {po.stat:.3f} > crit {po.critical_values[5]:.3f}."
+            (failures.append(("phillips_ouliaris", reason)) if self.cfg.coint_enforce_po
+             else logging.debug(reason + " Continuing (coint_enforce_po=False)."))
 
         # VAR selection
         k_ar_diff = VAR(df_window).select_order(self.cfg.coint_maxlags).bic
@@ -107,26 +79,10 @@ class CointegrationModel:
             results[f"Johansen_r<={i}_crit_95"] = jtest.trace_stat_crit_vals[i, 1]
 
         if results["Johansen_r=0_stat"] <= results["Johansen_r=0_crit_95"]:
-            if self.cfg.coint_enforce_johansen:
-                raise DiagnosticFailure(
-                    stage="johansen",
-                    reason=(f"Johansen trace fails to reject r=0 (stat={results['Johansen_r=0_stat']:.3f} "
-                            f"<= crit={results['Johansen_r=0_crit_95']:.3f})."),
-                    stats={"trace_stat": results["Johansen_r=0_stat"], "trace_crit_95": results["Johansen_r=0_crit_95"]},
-                    series={self.cfg.dep_col: df_window[self.cfg.dep_col],
-                            **{c: df_window[c] for c in self.cfg.indep_cols}},
-                )
-                # raise ValueError(
-                #     f"Johansen trace test fails to reject r=0 "
-                #     f"(stat={results['Johansen_r=0_stat']:.3f} <= "
-                #     f"crit={results['Johansen_r=0_crit_95']:.3f}). "
-                #     f"No evidence of cointegration at the 95% level."
-                # )
-            else:
-                logging.warning(
-                    f"Johansen trace test fails to reject r=0 — proceeding "
-                    f"because coint_enforce_johansen=False."
-                )
+            reason = (f"Johansen fails to reject r=0 (stat={results['Johansen_r=0_stat']:.3f} "
+                      f"<= crit={results['Johansen_r=0_crit_95']:.3f}).")
+            (failures.append(("johansen", reason)) if self.cfg.coint_enforce_johansen
+             else logging.warning(reason + " Continuing (coint_enforce_johansen=False)."))
 
         # VECM coefficients
         vecm_res = VECM(df_window, k_ar_diff=k_ar_diff, deterministic=self.cfg.vecm_det).fit()
@@ -144,8 +100,6 @@ class CointegrationModel:
         logging.debug(f"Spread stationarity: {spread}")
 
         #Half-Life
-        # Spread_t = rho * Spread_{t-1} + e
-        # Half-life = -log(2) / log(abs(rho))
         spread_series = pd.Series(spread)
         z_lag = spread_series.shift(1).dropna()
         z_diff = spread_series.diff().dropna()
@@ -166,8 +120,17 @@ class CointegrationModel:
         results["Spread_ADF_stat"] = spread_adf.stat
         results["Spread_ADF_crit_95"] = spread_adf.critical_values['5%']
         results["Spread_pvalue"] = spread_adf.pvalue
+        results["failed_tests"] = [f[0] for f in failures]
 
         logging.debug(f"Spread ADF: {spread_adf}")
+
+        if failures:
+            raise DiagnosticFailure(
+                stage=", ".join(f[0] for f in failures),
+                reason=" | ".join(f[1] for f in failures),
+                stats={k: v for k, v in results.items() if isinstance(v, (int, float, np.floating))},
+                series=series_for_plot,
+            )
         return results
         
     def get_model_confidence(self, results: dict) -> dict:

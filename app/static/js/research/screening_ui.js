@@ -32,6 +32,13 @@ export class ScreeningUI {
             ? `Passed: ${JSON.stringify(data.summary)}`
             : `Failed at [${data.stage}]: ${data.reason}`;
 
+        if (data.stats && Object.keys(data.stats).length) {
+            const rows = Object.entries(data.stats)
+                .map(([k, v]) => `<tr><td>${k}</td><td>${typeof v === 'number' ? v.toFixed(4) : v}</td></tr>`)
+                .join('');
+            this.dom.resultBox.innerHTML += `<table class="stats-table"><tbody>${rows}</tbody></table>`;
+        }
+
         if (data.fig_data) {
             this.app.renderPlot('screening-plot-container', data.fig_data);
         } else {

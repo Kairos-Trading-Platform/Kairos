@@ -3,52 +3,56 @@
 
 <body>
     {% block content %}
-    <h1>{{ title }}</h1>
     
-    <div class="chart-container">
-             
-        <div id="history-controls" style="padding: 10px 10px;">
-            <label for="start-date">Missing data? Backfill from:</label>
-            <input type="date" id="start-date" name="start-date" style="font-size: 0.9em;">
-            <button id="expand-btn" style="padding: 2px 8px; cursor: pointer; background: #007BFF; color: white; border: none; border-radius: 3px;">Expand</button>
+    <div class="research-layout">
+        <div class="portfolio-panel"> 
+            <h1>Portfolio</h1>
+        
+            <div class="analysis-tabs">
+                <div class="portfolio-tab portfolio-active-tab" data-mode="returns">Returns</div>
+                <div class="portfolio-tab" data-mode="heatmap">Correlation</div>
+                <div class="portfolio-tab" data-mode="efficient_frontier">Efficient frontier</div>
+            </div>
+            
+            <div id="tab-actions" style="padding-top: 10px;">
+                <button id="refresh-frontier-btn" class="btn-secondary invisible-placeholder">
+                    Update Frontier
+                </button>
+            </div>
+
+            <div id="history-controls" style="padding: 10px 10px;">
+                <label for="start-date">Missing data? Backfill from:</label>
+                <input type="date" id="start-date" name="start-date" style="font-size: 0.9em;">
+                <button id="expand-btn" style="padding: 2px 8px; cursor: pointer; background: #007BFF; color: white; border: none; border-radius: 3px;">Expand</button>
+            </div>
+
+            <h2 id="portfolio-chart-title" style="margin: 0; padding:10px;"></h2>
+            <div id="portfolio-plot-container">
+                <div id="loader" class="loader hidden"></div>
+            </div>
         </div>
-    
-        <div class="analysis-tabs">
-            <div class="portfolio-tab portfolio-active-tab" data-mode="returns">Returns</div>
-            <div class="portfolio-tab" data-mode="heatmap">Correlation</div>
-            <div class="portfolio-tab" data-mode="efficient_frontier">Efficient frontier</div>
-            <div class="portfolio-tab" data-mode="strategies">Strategies</div>
-            <div id="strategy-controls" style="display:none; padding:10px;">
-                <div id="strategy-warning-box" style="display: none;"></div>
-                
+
+        <div class="strategy-panel">
+            <h1>Strategies</h1>
+            <div style="display:flex;">
+                <div id="strategy-family-tabs" class="analysis-tabs" style="flex:1;"></div>
                 <select id="strategy-select"></select>
+            </div>
+            
+
+            <div id="strategy-controls" style="padding:10px;">
+                <div id="strategy-warning-box" style="display: none;"></div>
+                <div id="strategy-quick-picks"></div>
                 <div id="strategy-params"></div>
                 <button id="run-strategy-btn">Run</button>
-                    <select id="component-select"><option value="">Choose a class…</option></select>
-                    <div id="component-params" style="display:none;"></div>
-                    <label><input type="radio" name="sweep-mode" value="single" checked> One by one</label>
-                    <label><input type="radio" name="sweep-mode" value="grid"> Batch (grid)</label>
-                    <button id="run-sweep-btn">Run</button>
-                    <div id="sweep-results"></div>
-                
-                <div id="external-data-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
-                    <details>
-                        <summary style="cursor: pointer; color: #007BFF; font-size: 0.9em;">Advanced: External Data Sources</summary>
-                        <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
-                            <p style="font-size: 0.85em; color: #666; margin-bottom: 8px;">
-                                Missing tickers? You can:
-                            </p>
-                            <ul style="font-size: 0.85em; color: #555; padding-left: 20px;">
-                                <li>Use portfolio tickers (auto-suggests available assets)</li>
-                                <li>Backfill history for specific tickers (use "Expand" button above)</li>
-                                <li>Add new tickers to portfolio via Portfolio tab</li>
-                                <li>Coming soon: Import external CSV/API data</li>
-                            </ul>
-                        </div>
-                    </details>
-                </div>
+                <select id="component-select"><option value="">Choose a class…</option></select>
+                <div id="component-params" style="display:none;"></div>
+                <label><input type="radio" name="sweep-mode" value="single" checked> One by one</label>
+                <label><input type="radio" name="sweep-mode" value="grid"> Batch (grid)</label>
+                <button id="run-sweep-btn">Run</button>
+                <div id="sweep-results"></div>
             </div>
-            <div class="portfolio-tab" data-mode="screening">Screening</div>
+
             <div id="screening-controls" style="display:none; padding:10px;">
                 <input id="screening-dep" placeholder="dep_col (e.g. ADA-USD)">
                 <input id="screening-indep" placeholder="indep_cols, comma-separated (e.g. AMT)">
@@ -60,18 +64,6 @@
                     <tbody></tbody>
                 </table>
             </div>
-        </div>
-        
-        <div id="tab-actions" style="padding-top: 10px;">
-            <button id="refresh-frontier-btn" class="btn-secondary invisible-placeholder">
-                Update Frontier
-            </button>
-        </div>
-
-    
-        <h2 id="portfolio-chart-title" style="margin: 0; padding:10px;"></h2>
-        <div id="portfolio-plot-container">
-            <div id="loader" class="loader hidden"></div>
         </div>
     </div>
     
@@ -151,13 +143,10 @@
     <script type="module">
         import { ResearchController } from '{{ url_for("static", filename="js/research/research_controller.js") }}';
         import { ComponentSweepUI } from '{{ url_for("static", filename="js/research/component_sweep_ui.js") }}';
-        import { ScreeningUI } from '{{ url_for("static", filename="js/research/screening_ui.js") }}';
-
         document.addEventListener('DOMContentLoaded', () => {
             console.log("Initialising research app...");
             window.activeApp = new ResearchController({ selectedTicker: "{{ selected_ticker | default('', true) }}" });
             new ComponentSweepUI();
-            new ScreeningUI(window.activeApp);
         });
     </script>
     {% endblock %}

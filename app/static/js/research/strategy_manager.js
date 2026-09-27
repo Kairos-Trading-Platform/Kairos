@@ -9,7 +9,9 @@ export class StrategyManager {
             // Warning container for missing tickers
             warningBox: document.getElementById('strategy-warning-box'),
             warningList: document.getElementById('missing-tickers-list'),
-            fixBtn: document.getElementById('fix-missing-btn')
+            fixBtn: document.getElementById('fix-missing-btn'),
+            // Default strategies tabs
+            quickPicks: document.getElementById('strategy-quick-picks'),
         };
         this.currentSchema = [];
         this.portfolioTickers = []; // Will be populated from portfolio data
@@ -17,17 +19,50 @@ export class StrategyManager {
 
     async init() {
         if (!this.dom.select) return;
-        const strategies = await this.app.apiRequest('/strategies');
-        this.dom.select.innerHTML = strategies
-            .map(s => `<option value="${s.key}">${s.label}</option>`).join('');
-        
         await this.loadPortfolioTickers(); // Load portfolio tickers for auto-fill
         
         this.dom.select.addEventListener('change', () => this.loadSchema());
         this.dom.runBtn.addEventListener('click', () => this.run());
         this.dom.fixBtn?.addEventListener('click', () => this.fixMissingTickers());
 
-        await this.loadSchema();
+        //await this.loadSchema();
+    }
+
+    setStrategies(strategies) {
+        const byFamily = strategies.reduce((acc, s) => {
+            (acc[s.family || 'Other'] ??= []).push(s);
+            return acc;
+        }, {});
+
+        this.dom.select.innerHTML = Object.entries(byFamily)
+            .map(([fam, list]) => `<optgroup label="${fam}">${
+                list.map(s => `<option value="${s.key}">${s.label}</option>`).join('')
+            }</optgroup>`)
+            .join('');
+
+        this.loadSchema();
+    }
+
+    updateQuickPicks(strategies) {
+        this._renderQuickPicks(strategies);
+    }
+
+    _renderQuickPicks(strategies, maxChips = 4) {
+        if (!this.dom.quickPicks) return;
+        this.dom.quickPicks.innerHTML = strategies.slice(0, maxChips).map(s =>
+            `<button type="button" class="strategy-chip" data-key="${s.key}">${s.label}</button>`
+        ).join('');
+        this.dom.quickPicks.querySelectorAll('.strategy-chip').forEach(btn =>
+            btn.addEventListener('click', () => {
+                this.dom.select.value = btn.dataset.key;
+                this.dom.quickPicks.querySelectorAll('.strategy-chip')
+                    .forEach(b => b.classList.toggle('active-chip', b === btn));
+                this.loadSchema();
+            })
+        );
+        const current = this.dom.select.value;
+        this.dom.quickPicks.querySelectorAll('.strategy-chip')
+            .forEach(b => b.classList.toggle('active-chip', b.dataset.key === current));
     }
 
     // Fetch portfolio tickers to use as defaults
@@ -54,41 +89,31 @@ export class StrategyManager {
         const key = this.dom.select.value;
         this.currentSchema = await this.app.apiRequest(`/strategies/${key}/schema`);
         
-        // Auto-populate ticker fields with portfolio tickers
-        this.dom.params.innerHTML = this.currentSchema.map(p => {
-            let defaultValue = p.default;
-            
-            // If this is a ticker field and we have portfolio tickers, use them as default
-            if ((p.type === 'ticker' || p.type === 'multi_ticker') && this.portfolioTickers.length > 0) {
-                if (p.type === 'ticker') {
-                    // Single ticker: use first portfolio ticker
-                    defaultValue = this.portfolioTickers[0];
-                } else if (p.type === 'multi_ticker') {
-                    // Multi-ticker: use first 2-3 portfolio tickers
-                    defaultValue = this.portfolioTickers.slice(0, 3).join(', ');
-                }
+        const hasTickers = this.portfolioTickers.length > 0;
+        const datalist = hasTickers
+            ? `<datalist id="portfolio-ticker-options">${
+                this.portfolioTickers.map(t => `<option value="${t}">`).join('')
+            }</datalist>`
+            : '';
+
+        this.dom.params.innerHTML = datalist + this.currentSchema.map(p => {
+            const isTickerField = p.type === 'ticker' || p.type === 'multi_ticker';
+
+            let placeholder = p.default;
+            if (isTickerField && hasTickers) {
+                placeholder = p.type === 'ticker'
+                    ? this.portfolioTickers[0]
+                    : this.portfolioTickers.slice(0, 3).join(', ');
             }
-            
+
             return `
             <div class="form-group" data-param-key="${p.key}" data-param-type="${p.type}">
                 <label>${p.label}</label>
-                <input id="param_${p.key}" 
-                       value="${Array.isArray(defaultValue) ? defaultValue.join(', ') : defaultValue}"
-                       ${p.type === 'multi_ticker' ? 'placeholder="e.g., AMAT, LRCX"' : ''}>
-                ${this.getPortfoliolHint(p)}
+                <input id="param_${p.key}"
+                    placeholder="${Array.isArray(placeholder) ? placeholder.join(', ') : placeholder}"
+                    ${isTickerField && hasTickers ? 'list="portfolio-ticker-options"' : ''}>
             </div>`;
         }).join('');
-    }
-
-    // Show hint about available portfolio tickers
-    getPortfoliolHint(param) {
-        if ((param.type === 'ticker' || param.type === 'multi_ticker') && this.portfolioTickers.length > 0) {
-            return `
-                <small class="hint-text" style="display: block; margin-top: 4px; color: #666; font-size: 0.85em;">
-                    Available in portfolio: ${this.portfolioTickers.slice(0, 5).join(', ')}${this.portfolioTickers.length > 5 ? '...' : ''}
-                </small>`;
-        }
-        return '';
     }
 
     collectParams() {
